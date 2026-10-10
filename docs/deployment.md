@@ -44,13 +44,22 @@ npm run dev
 
 Open http://localhost:3000/login and continue as demo owner. Keep ANTHROPIC_MODE=mock during the demo if no real request is intended.
 
-## Live chatbot and side-by-side comparison
+## Scripted chatbot and optional live backend
 
-1. Open the root `.env.anthropic.local` (created locally and git-ignored), or copy `.env.anthropic.local.example` to that name on a new checkout. Paste your Anthropic Console key after `ANTHROPIC_API_KEY=`. It is backend-only; never use a NEXT_PUBLIC variable for this key.
-2. Stop the running local launcher, then run `python scripts/local_demo.py --web-port 3001 --skip-prepare --live`. Fast restarts still migrate/bootstrap to load the current pricing catalog; only synthetic seeding/evaluation is skipped. Without `--live`, the launcher explicitly stays in mock mode even if a key exists.
-3. Open http://localhost:3001/login, sign in as owner, then open Demo Chatbot. Startup validates access to the configured Anthropic model and refuses a missing/invalid key; live provider failures do not silently become mock replies.
-4. Use Side-by-side comparison. The same independent question, approved facts, model and output cap go through direct Anthropic and TokenGuard. The baseline always calls Anthropic; TokenGuard uses the existing approved policy. Approve caching in Decision Lab to see FAQ hits; with caching disabled or unsafe questions, both arms call the provider. Comparison is owner-only and consumes two rate-limit slots.
-5. Each side accumulates returned input/output token counts and estimated provider cost for the current tab session. Cache hits have zero provider tokens/cost. Reset clears the UI only; reloading starts a new session. Single chatbot mode does not contribute to comparison counters. Only successful pairs contribute to the provider cost difference; failed/unknown usage is explicitly excluded. Network interruption may lose the response after a billed call; check Usage Explorer before manually retrying. Live launcher disables SDK retries.
+The `/demo/chat` interface now runs entirely in the browser. No API key, backend
+login, cache-policy approval or provider calls are needed for it. All replies,
+token usage and costs are hardcoded. Original questions fill a session cache;
+exact repeats and listed paraphrases return the same answer with zero provider
+tokens/cost. Reset or reload clears the session. Simulated traffic is not written
+to the dashboard ledger. See [all questions and answers](scripted_chat_demo.md).
+
+For the chatbot alone, run `npm run dev -- --port 3003` in `apps/web` and open
+http://localhost:3003/demo/chat. For the whole dashboard, use the root local launcher.
+
+The backend still supports `/api/v1/chat` and owner-only `/api/v1/chat/compare`.
+To use these endpoints with real Anthropic, paste the key into the ignored root
+`.env.anthropic.local` and start the launcher with `--live`. Startup validates the
+key/model. These endpoints make billed calls; the scripted UI does not call them.
 
 Baseline calls are logged under `bakery_demo_baseline`; TokenGuard calls remain under `bakery_demo`. Both count toward actual workspace usage/cost, but the baseline does not pollute bakery cache measurements. No raw questions are persisted. The separate baseline app is created idempotently; no schema migration is needed. Mock token counts/costs are illustrative, not paid savings.
 

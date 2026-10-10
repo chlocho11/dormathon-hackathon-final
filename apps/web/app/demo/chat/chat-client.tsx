@@ -1,136 +1,61 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, RotateCcw, Send } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
-import { formatMYR, formatNum, titleCase } from "@/lib/format";
-import { pairedCostDifference, tallyArm } from "@/lib/chat-comparison";
-import type { ChatComparison, ChatResponse, ChatSession, ComparisonArm } from "@/lib/types";
+import { ArrowLeft, ArrowUp, Bot, Check, RotateCcw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { ErrorState } from "@/components/states";
+import { createDemoTurn, demoTotals, type DemoTurn } from "@/lib/scripted-chat";
 
-const prompts = ["What time do you open?", "Do you deliver?", "What cakes do you sell?", "Do you open on Sunday?", "Is my order ready?"];
-type Message = { id: number; question: string; comparison?: ChatComparison; response?: ChatResponse; failed?: boolean; comparing: boolean };
+type VisibleTurn = DemoTurn & { baselinePending?: boolean; tokenguardPending?: boolean };
+const money = (cost: number) => `RM${cost.toFixed(6)}`;
 
-function Reply({ arm, pending, label }: { arm?: ComparisonArm; pending: boolean; label?: string }) {
-  const response = arm?.response;
-  return <div className="min-w-0 rounded-lg border bg-card p-4">
-    {label && <h3 className="mb-2 text-sm font-medium">{label}</h3>}
-    <p className="whitespace-pre-wrap break-words">{response?.reply ?? (pending ? "Preparing your reply…" : arm?.error?.message ?? "No response received. Usage is unknown; check Usage Explorer before retrying.")}</p>
-    {arm?.error && <p className="mt-2 text-xs text-amber-800">Failed call: no returned usage. It is excluded from totals and paired cost differences.</p>}
-    {response && <div className="mt-4 space-y-2 border-t pt-3 text-xs text-muted-foreground" aria-label="Request details">
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="outline">{["exact_hit", "semantic_hit"].includes(response.cache_status) ? "Safe cache hit" : response.cache_status === "bypass" ? "Bypass · provider call" : "Provider call"}</Badge>
-        <Badge variant="outline">{response.provider_mode === "mock" ? "Mock provider · no API charge" : response.provider_mode === "none" ? "Approved FAQ answer" : "Live Anthropic"}</Badge>
-      </div>
-      <p>{formatNum(response.usage.input_tokens)} input / {formatNum(response.usage.output_tokens)} output tokens · {formatMYR(response.estimated_cost_myr, true)} estimated provider cost</p>
-      <p>{titleCase(response.cache_decision ?? response.cache_status)}</p>
-    </div>}
-  </div>;
-}
-
-function Totals({ name, arm, totals }: { name: string; arm: string; totals: ReturnType<typeof tallyArm> }) {
-  return <section className={`min-w-0 rounded-lg border p-5 ${arm === "tokenguard" ? "border-blue-200 bg-blue-50/40" : "bg-card"}`} aria-label={name}>
-    <h2 className="text-lg font-semibold">{name}</h2>
-    <p className="mb-4 mt-1 text-xs text-muted-foreground">{arm === "baseline" ? "Every question goes directly to Anthropic." : "Approved safe FAQs avoid a provider call."}</p>
-    <dl className="grid grid-cols-2 gap-4 tabular">
-      <div><dt className="text-xs text-muted-foreground">Input tokens</dt><dd className="text-xl font-semibold" data-testid={`${arm}-input-total`}>{formatNum(totals.input_tokens)}</dd></div>
-      <div><dt className="text-xs text-muted-foreground">Output tokens</dt><dd className="text-xl font-semibold" data-testid={`${arm}-output-total`}>{formatNum(totals.output_tokens)}</dd></div>
-      <div className="col-span-2"><dt className="text-xs text-muted-foreground">Estimated provider cost</dt><dd className="text-2xl font-semibold" data-testid={`${arm}-cost-total`}>{formatMYR(totals.estimated_cost_myr, true)}</dd></div>
-    </dl>
-    <p className="mt-4 text-xs text-muted-foreground">{totals.completed} completed · {totals.provider_calls} provider calls · {totals.cache_hits} cache hits{totals.errors > 0 ? ` · ${totals.errors} failed (usage unknown)` : ""}</p>
+function Conversation({ arm, turns }: { arm: "baseline" | "tokenguard"; turns: VisibleTurn[] }) {
+  const guarded = arm === "tokenguard";
+  const totals = demoTotals(turns.filter((turn) => !turn[arm === "baseline" ? "baselinePending" : "tokenguardPending"]), arm);
+  const end = useRef<HTMLDivElement>(null);
+  useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [turns]);
+  return <section aria-label={guarded ? "With TokenGuard conversation" : "Without TokenGuard conversation"} className="flex min-w-0 flex-col rounded-2xl border bg-background">
+    <header className="flex items-center gap-3 border-b px-4 py-4 md:px-6"><div className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${guarded ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`}>{guarded ? <ShieldCheck className="size-5" /> : <Bot className="size-5" />}</div><div><h2 className="text-base font-semibold">{guarded ? "With TokenGuard" : "Without TokenGuard"}</h2><p className="text-xs text-muted-foreground">{guarded ? "Reuse answers with exact and semantic caching" : "Generate an answer for every message"}</p></div></header>
+    <dl className="grid grid-cols-3 gap-2 border-b bg-muted/30 px-4 py-3 md:px-6"><div><dt className="text-xs text-muted-foreground">Input tokens</dt><dd data-testid={`${arm}-input-total`} className="mt-1 font-semibold tabular-nums">{totals.input.toLocaleString()}</dd></div><div><dt className="text-xs text-muted-foreground">Output tokens</dt><dd data-testid={`${arm}-output-total`} className="mt-1 font-semibold tabular-nums">{totals.output.toLocaleString()}</dd></div><div><dt className="text-xs text-muted-foreground">Estimated cost</dt><dd data-testid={`${arm}-cost-total`} className="mt-1 break-all text-sm font-semibold tabular-nums">{money(totals.cost)}</dd></div></dl>
+    <div role="log" aria-label={guarded ? "TokenGuard messages" : "Baseline messages"} className="h-[380px] space-y-7 overflow-y-auto overscroll-contain px-4 py-6 md:h-[430px] md:px-6">
+      {!turns.length && <div className="flex h-full flex-col items-center justify-center gap-3 text-center"><Bot className="size-7 text-muted-foreground" /><h3 className="text-lg font-medium">Ask Sweet Crumbs Bakery</h3><p className="max-w-64 text-sm text-muted-foreground">{guarded ? "The first answer fills the cache. Ask again to see the difference." : "Ask a question to start the conversation."}</p></div>}
+      {turns.map((turn, index) => {
+        const waiting = turn[arm === "baseline" ? "baselinePending" : "tokenguardPending"];
+        const reply = turn[arm]; const cached = reply.mode !== "generated";
+        return <article key={index} className="space-y-5"><div className="ml-auto max-w-[88%] rounded-3xl rounded-br-md bg-slate-700 text-white px-4 py-3 dark:bg-slate-600"><p className="sr-only">You</p><p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{turn.question}</p></div><div className="flex items-start gap-3"><span className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${guarded ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "bg-muted"}`}><Bot className="size-4" /></span><div className="min-w-0 space-y-2"><p className="text-xs font-semibold">Sweet Crumbs AI</p><p className="text-sm leading-7">{waiting ? <span role="status" className="text-muted-foreground motion-safe:animate-pulse">Generating...</span> : reply.answer}</p>{!waiting && <><div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${cached ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`}>{cached && <Check className="size-3" />}{reply.mode === "exact_hit" ? "Exact cache hit" : reply.mode === "semantic_hit" ? "Semantic cache hit" : "Generated answer"}</div><p className="text-xs text-muted-foreground tabular-nums">{reply.input} input / {reply.output} output tokens · {money(reply.cost)}{cached && ` / ${turn.lookup_ms < 0.01 ? "<0.01" : turn.lookup_ms.toFixed(2)} ms local lookup`}</p></>}</div></div></article>;
+      })}<div ref={end} />
+    </div><footer className="border-t px-4 py-2 text-xs text-muted-foreground md:px-6">{turns.length} replies{guarded && ` · ${totals.hits} cache hits`} · cumulative session totals</footer>
   </section>;
 }
 
 export function ChatClient() {
-  const session = useRef<ChatSession | null>(null);
-  const sequence = useRef(0);
-  const busy = useRef(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
+  const [turns, setTurns] = useState<VisibleTurn[]>([]);
   const [pending, setPending] = useState(false);
-  const [compareMode, setCompareMode] = useState(true);
-  const [error, setError] = useState<unknown>(null);
-  const settings = useQuery({ queryKey: ["chat-settings"], queryFn: api.settings, retry: false });
-  const health = useQuery({ queryKey: ["health"], queryFn: api.health });
-  const policies = useQuery({ queryKey: ["chat-policies"], queryFn: api.policies, enabled: settings.isSuccess });
-  const owner = settings.data?.role === "owner";
-  const comparisons = messages.flatMap((m) => m.comparison ? [m.comparison] : []);
-  const baselineTotals = tallyArm(comparisons.map((c) => c.baseline));
-  const optimizedTotals = tallyArm(comparisons.map((c) => c.tokenguard));
-  const paired = pairedCostDifference(comparisons);
-  const last = comparisons.at(-1);
-  const policyEnabled = last?.policy_enabled ?? policies.data?.items.find((p) => p.application === "bakery_demo")?.enabled;
-  const live = health.data?.dependencies.anthropic.mode === "live";
-  const canSend = !pending && (!compareMode || owner);
-
-  async function send(question: string) {
-    question = question.trim();
-    if (!question || question.length > 1000 || busy.current || !canSend) return;
-    busy.current = true;
-    setPending(true);
-    setError(null);
-    const id = ++sequence.current;
-    setMessages((previous) => [...previous, { id, question, comparing: compareMode }]);
-    setInput("");
-    try {
-      if (!session.current || Date.parse(session.current.expires_at) <= Date.now() + 5000) session.current = await api.chatSession();
-      if (compareMode) {
-        const comparison = await api.chatCompare(session.current.application_id, question);
-        setMessages((previous) => previous.map((m) => m.id === id ? { ...m, comparison } : m));
-      } else {
-        const response = await api.chat(session.current.token, session.current.application_id, question);
-        setMessages((previous) => previous.map((m) => m.id === id ? { ...m, response } : m));
-      }
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 401) session.current = null;
-      setError(e);
-      setInput(question);
-      setMessages((previous) => previous.map((m) => m.id === id ? { ...m, failed: true } : m));
-    } finally {
-      busy.current = false;
-      setPending(false);
-    }
+  const busy = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const [input, setInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const baseline = demoTotals(turns.filter((turn) => !turn.baselinePending), "baseline"); const guarded = demoTotals(turns.filter((turn) => !turn.tokenguardPending), "tokenguard");
+  function send(question: string) {
+    if (busy.current) return;
+    const turn = createDemoTurn(question, turns);
+    if (!turn) { setError("Please ask about opening hours, our cake menu, pickup, delivery, or chocolate cake prices."); return; }
+    busy.current = true; setPending(true);
+    setTurns((previous) => [...previous, { ...turn, baselinePending: true, tokenguardPending: turn.tokenguard.mode === "generated" }]);
+    setInput(""); setError(null);
+    timer.current = setTimeout(() => {
+      setTurns((previous) => previous.map((item, index) => index === previous.length - 1 ? { ...item, baselinePending: false, tokenguardPending: false } : item));
+      busy.current = false; setPending(false); timer.current = null;
+    }, 2800 + Math.random() * 400);
   }
-
-  return <main className="mx-auto max-w-6xl space-y-6 px-4 py-8 md:px-8">
-    <Link href="/overview" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />TokenGuard dashboard</Link>
-    <header className="space-y-2">
-      <h1 className="text-3xl">Sweet Crumbs BakeryBot</h1>
-      <p className="max-w-2xl text-muted-foreground">One question. Two paths. Compare direct AI responses with TokenGuard’s approved FAQ caching.</p>
-      <div className="flex flex-wrap gap-2"><Badge variant="outline">{health.isLoading ? "Checking provider…" : health.isError ? "Provider unavailable" : live ? "Live Anthropic · billed calls" : "Mock provider · no API charge"}</Badge><Badge variant="outline">{policyEnabled === undefined ? "Checking cache policy…" : policyEnabled ? "Approved cache enabled" : "Cache disabled"}</Badge></div>
-    </header>
-    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Demo bakery; all business facts are fictitious. No real orders or payments. Please do not share personal details. {live && "Comparison makes one or two billed Anthropic calls per question."}</div>
-    <div className="flex flex-wrap items-center gap-2" aria-label="Chat mode">
-      <Button variant={compareMode ? "default" : "outline"} size="sm" disabled={pending} aria-pressed={compareMode} onClick={() => setCompareMode(true)}>Side-by-side comparison</Button>
-      <Button variant={!compareMode ? "default" : "outline"} size="sm" disabled={pending} aria-pressed={!compareMode} onClick={() => setCompareMode(false)}>Single chatbot</Button>
-      <Button variant="ghost" size="sm" className="sm:ml-auto" disabled={pending || !messages.length} onClick={() => { setMessages([]); setError(null); setInput(""); }}><RotateCcw className="size-4" />Reset session</Button>
-    </div>
-    {compareMode && <>
-      {!owner && !settings.isLoading && <p className="text-sm text-muted-foreground"><Link href="/login" className="text-primary underline">Sign in as workspace owner</Link> to run comparisons. Single chatbot remains available.</p>}
-      {policyEnabled === false && <p className="text-sm text-muted-foreground">Caching is off, so both paths use the provider. <Link href="/decisions" className="text-primary underline">Approve caching in Decision Lab</Link> to compare safe FAQ hits.</p>}
-      <div className="grid gap-4 md:grid-cols-2"><Totals name="Without TokenGuard" arm="baseline" totals={baselineTotals} /><Totals name="With TokenGuard" arm="tokenguard" totals={optimizedTotals} /></div>
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border px-4 py-3 text-sm"><span>Provider cost difference</span><strong className="tabular">{formatMYR(paired.difference, true)}</strong><span className="text-xs text-muted-foreground">{paired.pairs} successful pairs · baseline minus TokenGuard · excludes local hosting/cache overhead</span></div>
-      <p className="text-xs text-muted-foreground">Cumulative totals cover comparison replies in this tab only. Reset clears the display, not recorded usage. Both paths use the same model, question and approved bakery facts; each question is independent. Extra baseline calls appear as BakeryBot baseline in Usage Explorer.</p>
-      {last && <p className="break-words text-xs text-muted-foreground">{last.model} · input ${last.input_usd_per_million} / output ${last.output_usd_per_million} per million tokens · fixed estimate RM{last.fx_myr_per_usd.toFixed(2)}/USD · {last.pricing_catalog_version}{last.provider_mode === "mock" ? " · mock token estimates, no paid spend" : " · actual returned API usage, estimated cost"}</p>}
-    </>}
-    <div className="flex flex-wrap gap-2">{prompts.map((prompt) => <Button key={prompt} variant="outline" size="sm" disabled={!canSend} onClick={() => void send(prompt)}>{prompt}</Button>)}</div>
-    <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
-      <label htmlFor="message" className="sr-only">Your question</label><Input id="message" value={input} maxLength={1000} onChange={(e) => setInput(e.target.value)} placeholder="Ask the bakery…" disabled={!canSend} autoComplete="off" />
-      <Button type="submit" disabled={!canSend || !input.trim()}><Send className="size-4" /><span className="sr-only sm:not-sr-only">{compareMode ? "Compare" : "Send"}</span></Button>
-    </form>
-    {error !== null && <><ErrorState error={error} /><p className="text-xs text-amber-800">No automatic retry. If the connection failed after sending, a provider call may have completed; check Usage Explorer before resending.</p></>}
-    <div role="log" aria-live="polite" aria-label="Conversation" className="space-y-5">
-      {!messages.length && <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">Choose a sample question or write your own. Session counters start at zero.</p>}
-      {messages.map((m) => <article key={m.id} className="space-y-3">
-        <p className="rounded-lg bg-blue-50 px-4 py-3 text-blue-950">{m.question}</p>
-        {m.comparing ? <div className="grid gap-4 md:grid-cols-2"><Reply label="Without TokenGuard" arm={m.comparison?.baseline} pending={!m.comparison && !m.failed} /><Reply label="With TokenGuard" arm={m.comparison?.tokenguard} pending={!m.comparison && !m.failed} /></div> : <Reply arm={m.response ? { response: m.response, error: null } : undefined} pending={!m.response && !m.failed} />}
-      </article>)}
-    </div>
-    <p className="text-xs text-muted-foreground">Order status and personal questions bypass the cache. TokenGuard cache hits use zero provider input/output tokens; the approved FAQ answer still contains text. Session cost differences are observations, not guaranteed net savings.</p>
+  return <main className="mx-auto max-w-7xl space-y-5 px-4 py-5 md:px-8">
+    <div className="flex flex-wrap items-center justify-between gap-2"><Link href="/overview" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />TokenGuard dashboard</Link><Button variant="ghost" size="sm" disabled={pending} onClick={() => { setTurns([]); setInput(""); setError(null); }}><RotateCcw className="size-4" />Reset demo</Button></div>
+    <header className="space-y-2"><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">One conversation. See the cache make a difference.</h1><p className="text-sm text-muted-foreground">Sweet Crumbs BakeryBot · Compare a fresh answer with a cached response.</p></header>
+    <div className="grid gap-4 md:grid-cols-2"><Conversation arm="baseline" turns={turns} /><Conversation arm="tokenguard" turns={turns} /></div>
+    <div aria-live="polite" className="flex flex-wrap items-center justify-between gap-2 text-sm"><p>Estimated cost saved <strong data-testid="cost-saved" className="ml-2 tabular-nums text-emerald-700 dark:text-emerald-300">{money(baseline.cost - guarded.cost)}</strong></p><p className="text-xs text-muted-foreground">Reset clears messages, counters and the demo cache.</p></div>
+    <form className="rounded-2xl border bg-muted/30 p-3" onSubmit={(event) => { event.preventDefault(); send(input); }}><label htmlFor="message" className="sr-only">Your question</label><div className="flex items-end gap-3"><textarea id="message" rows={2} maxLength={1000} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (input.trim()) send(input); } }} placeholder="Message both assistants…" className="min-w-0 flex-1 resize-none rounded-lg bg-transparent px-2 py-1 text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring" /><Button type="submit" size="icon" disabled={pending || !input.trim()} aria-label="Send message" className="shrink-0 rounded-xl"><ArrowUp className="size-5" /></Button></div><p className="px-2 pt-2 text-xs text-muted-foreground">Enter to send · Shift + Enter for a new line · the same message goes to both sides</p></form>
+    {error && <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">{error}</p>}
+    <details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Demo estimates</summary><p className="mt-2 leading-5">Usage and generation delays are simulated; cache timing measures only the local predefined-variant lookup. No provider calls or charges. Estimates use $1 input / $5 output per million tokens and RM4.70/USD. All bakery facts are fictional; messages do not enter dashboard usage.</p></details>
   </main>;
 }

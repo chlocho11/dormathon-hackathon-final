@@ -1,0 +1,54 @@
+import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
+import { chromium } from "playwright";
+
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+const errors = []; const apiCalls = [];
+page.on("pageerror", (error) => errors.push(error.message));
+page.on("request", (request) => { if (/\/api\/v1\/|api\.anthropic\.com/.test(request.url())) apiCalls.push(request.url()); });
+const output = "test-results/screenshots";
+await mkdir(output, { recursive: true });
+try {
+  await page.goto((process.env.E2E_WEB_URL || "http://localhost:3003") + "/demo/chat");
+  const send = async (question) => {
+    await page.getByLabel("Your question", { exact: true }).fill(question);
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('button[aria-label="Send message"]')?.disabled || document.querySelector('textarea')?.value === '', { timeout: 10000 });
+  };
+  const finished = async () => { await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Reset demo')?.disabled); };
+  assert.equal(await page.locator("select").count(), 0);
+  const count = async (arm) => Number((await page.getByTestId(arm + "-input-total").innerText()).replaceAll(",", ""));
+  const started = Date.now();
+  await send("What time do you open?");
+  await finished();
+  assert.ok(Date.now() - started >= 2700, "Generation shows an approximately three-second delay");
+  const answer = (name) => page.getByRole("log", { name, exact: true }).locator("article p.leading-7").first().innerText();
+  assert.notEqual(await answer("Baseline messages"), await answer("TokenGuard messages"));
+  assert.equal(await count("baseline"), 520); assert.equal(await count("tokenguard"), 520);
+  await send("What time do you open?");
+  await page.getByText("Exact cache hit", { exact: true }).waitFor();
+  await finished(); assert.ok(await count("baseline") > 1040); assert.equal(await count("tokenguard"), 520);
+  await page.getByLabel("Your question", { exact: true }).fill("What are your opening hours?");
+  await page.getByLabel("Your question", { exact: true }).press("Enter");
+  await page.getByText("Semantic cache hit", { exact: true }).waitFor();
+  await finished(); assert.ok(await count("baseline") > 1500); assert.equal(await count("tokenguard"), 520);
+  assert.ok(Number(await page.getByTestId("baseline-output-total").innerText()) >= 110);
+  assert.equal(await page.getByTestId("tokenguard-output-total").innerText(), "38");
+  assert.ok(Number((await page.getByTestId("cost-saved").innerText()).slice(2)) > 0);
+  await page.screenshot({ path: output + "/scripted-chat-desktop.png", fullPage: true });
+  await page.setViewportSize({ width: 360, height: 800 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+  await page.screenshot({ path: output + "/scripted-chat-mobile.png", fullPage: true });
+  await page.getByRole("button", { name: "Reset demo", exact: true }).click();
+  assert.equal(await count("baseline"), 0); assert.equal(await count("tokenguard"), 0);
+  await page.getByLabel("Your question", { exact: true }).fill("Unsupported question");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await page.getByText("Please ask about opening hours, our cake menu, pickup, delivery, or chocolate cake prices.", { exact: true }).waitFor(); assert.equal(await count("baseline"), 0);
+  await send("What are your opening hours?");
+  await finished();
+  assert.equal(await count("tokenguard"), 520);
+  assert.deepEqual(apiCalls, [], "Scripted chat makes no backend or provider calls");
+  assert.deepEqual(errors, []);
+  console.log("PASS: first use, exact/semantic cache, totals, reset, unsupported input, mobile and zero API calls");
+} finally { await browser.close(); }

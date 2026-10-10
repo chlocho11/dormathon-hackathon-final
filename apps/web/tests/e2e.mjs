@@ -90,27 +90,28 @@ try {
   await screenshot("decisions-desktop");
 
   await page.goto(web + "/demo/chat");
-  await page.getByRole("button", { name: "What time do you open?", exact: true }).click();
-  await visible(page.getByText("Safe cache hit", { exact: true }));
+  await page.getByLabel("Your question", { exact: true }).fill("What time do you open?");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
   const inputCount = async (arm) => Number((await page.getByTestId(arm + "-input-total").innerText()).replaceAll(",", ""));
-  const firstBaseline = await inputCount("baseline");
-  assert.ok(firstBaseline > 0, "Comparison baseline uses provider input tokens");
-  assert.equal(await inputCount("tokenguard"), 0, "Approved FAQ avoids provider tokens on optimized side");
-  await page.getByRole("button", { name: "Is my order ready?", exact: true }).click();
-  await visible(page.getByText("Bypass · provider call", { exact: true }).last());
-  await page.getByRole("button", { name: "Compare", exact: true }).waitFor({ state: "visible" });
-  await page.waitForFunction(() => {
-    const node = document.querySelector('[data-testid="tokenguard-input-total"]');
-    return Number(node?.textContent?.replaceAll(",", "")) > 0;
-  });
-  assert.ok(await inputCount("baseline") > firstBaseline, "Baseline counters accumulate across questions");
-  assert.ok(await inputCount("tokenguard") > 0, "Unsafe question reaches provider on optimized side");
+  await page.waitForFunction(() => document.querySelector('[data-testid="baseline-input-total"]')?.textContent === '520');
+  assert.equal(await inputCount("baseline"), 520);
+  assert.equal(await inputCount("tokenguard"), 520);
+  await page.getByLabel("Your question", { exact: true }).fill("What time do you open?");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await visible(page.getByText("Exact cache hit", { exact: true }));
+  await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Reset demo')?.disabled);
+  await page.getByLabel("Your question", { exact: true }).fill("What are your opening hours?");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await visible(page.getByText("Semantic cache hit", { exact: true }));
+  await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Reset demo')?.disabled);
+  assert.ok(await inputCount("baseline") > 1500);
+  assert.equal(await inputCount("tokenguard"), 520);
   await screenshot("chat-desktop");
   await page.setViewportSize({ width: 360, height: 800 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "Comparison fits mobile");
   await screenshot("chat-mobile");
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.getByRole("button", { name: "Reset session", exact: true }).click();
+  await page.getByRole("button", { name: "Reset demo", exact: true }).click();
   assert.equal(await inputCount("baseline"), 0);
   assert.equal(await inputCount("tokenguard"), 0);
 
@@ -144,7 +145,7 @@ try {
   await page.goto(web + "/usage");
   await visible(page.getByText("Deliberate browser error-state test", { exact: true }));
   assert.deepEqual(errors, [], "No uncaught browser exceptions");
-  console.log("PASS: login, API values, CSV, settings, approval, comparison/cumulative counters/reset, cache hit/bypass, evaluation, mobile, viewer and error state");
+  console.log("PASS: login, API values, CSV, settings, approval, comparison/cumulative counters/reset, scripted exact/semantic hits, evaluation, mobile, viewer and error state");
 } finally {
   await browser.close();
   // Leave cache disabled, including on test failure.

@@ -20,10 +20,10 @@ embedded demo database, generates/evaluates synthetic history, and launches API/
 in mock mode. See [the runbook](docs/deployment.md) for verification and manual setup.
 If port 3000 is occupied, use `python scripts/local_demo.py --web-port 3001`.
 On subsequent runs, add `--skip-prepare` to reuse the prepared database and evaluation.
-For real Anthropic chat, paste your key into the git-ignored root `.env.anthropic.local`,
-then restart with `python scripts/local_demo.py --web-port 3001 --skip-prepare --live`.
-Owner sign-in enables side-by-side direct-provider versus TokenGuard replies with session
-token/cost totals. Each comparison makes up to two billed calls. See the runbook for details.
+The chatbot at `/demo/chat` is a scripted split-screen demo: fixed answers, tokens,
+and costs, with exact and predefined semantic cache hits. It makes no API calls and
+needs no key. See [the question guide](docs/scripted_chat_demo.md).
+The backend retains live Anthropic endpoints; `--live` enables those endpoints only.
 
 Prerequisites: Python 3.12 with [uv](https://docs.astral.sh/uv/), Node 24, and either Docker or the embedded PostgreSQL option.
 

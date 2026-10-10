@@ -206,3 +206,40 @@ Environment notes: this machine has no Docker or `make`; `uv` was installed via 
 
 ## Next: finish current verification
 The dashboard screens now build successfully. Complete browser smoke and visual inspection before marking Phase 4 complete. Cloud deployment still needs account access and live smoke evidence.
+# Scripted chat interface update (2026-10-11)
+
+The latest user request replaces the `/demo/chat` API-connected interface with
+a browser-only scripted split-screen conversation. Each pane has user/AI messages,
+per-reply token/cost metadata, cumulative input/output/cost totals and cache labels.
+Five predefined question sets each include two paraphrases and a fixed answer.
+First use of a topic has equal usage on both sides; repeats/paraphrases return
+zero-token exact/semantic hits on TokenGuard. Reset clears messages and demo cache.
+Unsupported questions show guidance. The page labels all values as simulated;
+it calls no API and does not affect dashboard ledger/policies. Real backend chat
+endpoints and server-only key setup remain available independently.
+
+Question/answer runbook: `docs/scripted_chat_demo.md`. Fresh verification: seven
+frontend unit tests, lint and TypeScript checks passed; standalone browser smoke
+passed first use, exact/semantic hits, totals, reset, unsupported inputs, mobile
+overflow and zero API calls. Desktop/mobile screenshots are under ignored
+`apps/web/test-results/screenshots/scripted-chat-*.png`. This section supersedes
+earlier descriptions of API calls made by the chatbot UI. Whole-dashboard smoke
+has been updated for the scripted UI; it was not rerun in this update.
+
+Chat presentation follow-up: prominent implementation copy was replaced by a
+compact expandable Demo estimates disclosure. Generation estimates vary 5-10%
+around each topic's initial usage (whole-token rounding), costs are recalculated,
+and generation waits 2.8-3.2 seconds with a Generating loading state. First-use
+arms remain equal; cache hits appear independently without added delay, show
+measured local predefined-variant lookup milliseconds, and retain zero usage.
+Generation delay is simulated; cache timings do not measure a semantic model.
+
+Latest chat refinement: baseline replies cycle through three equivalent phrasings
+for each topic; TokenGuard retains the original answer for cache hits. Removed
+the topic selector and all question suggestion buttons; questions are entered
+only through the shared composer. The compact estimates disclosure remains.
+
+First-response refinement: generation delay is now 2.8-3.2 seconds, and baseline
+first replies use a different equivalent phrasing from TokenGuard. Initial token
+and cost estimates stay equal. Cache hits continue to reuse TokenGuard's first
+answer with no artificial cache delay.
