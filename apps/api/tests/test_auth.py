@@ -2,12 +2,35 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.auth import DEV_ISSUER
 from app.config import get_settings
-from app.models import PolicyAudit
+from app.models import PolicyAudit, ScenarioRun
 from app.services.seed import DEMO_OWNER_ID
+
+
+def test_public_guest_is_scoped_and_read_only(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "public_demo_enabled", True)
+    me = client.get("/api/v1/me")
+    assert me.status_code == 200
+    assert me.json()["is_guest"] is True
+    assert me.json()["memberships"][0]["role"] == "viewer"
+    assert client.get("/api/v1/settings/workspace").status_code == 200
+    assert client.get("/api/v1/settings/workspace?workspace_id=00000000-0000-4000-8000-000000000099").status_code == 404
+    assert client.patch("/api/v1/settings/workspace", json={"monthly_budget_myr": 999}).status_code == 403
+    assert client.post("/api/v1/recommendations/generate").status_code == 403
+    assert client.get("/api/v1/me", headers={"Authorization": "Bearer garbage"}).status_code == 401
+
+
+def test_public_scenario_preview_does_not_store_records(client, monkeypatch, seeded, session):
+    monkeypatch.setattr(get_settings(), "public_demo_enabled", True)
+    before = session.scalar(select(func.count()).select_from(ScenarioRun))
+    response = client.post("/api/v1/scenarios/compare", json={})
+    assert response.status_code == 200
+    assert len(response.json()["scenarios"]) == 2
+    session.expire_all()
+    assert session.scalar(select(func.count()).select_from(ScenarioRun)) == before
 
 
 def _token(secret: str | None = None, **overrides):

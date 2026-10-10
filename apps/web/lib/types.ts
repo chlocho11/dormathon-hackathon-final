@@ -17,7 +17,7 @@ export type HealthResponse = {
 };
 
 export type Membership = { workspace_id: string; workspace_name: string; role: "owner" | "viewer" };
-export type Me = { user_id: string; email: string | null; memberships: Membership[] };
+export type Me = { user_id: string; email: string | null; memberships: Membership[]; is_guest?: boolean };
 
 export type RegressionScores = { n: number; mae: number | null; rmse: number | null; wape: number | null; smape: number | null };
 

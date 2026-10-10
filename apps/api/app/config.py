@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://localhost:3000"]
     myr_per_usd_demo: float = 4.70
     demo_mode: bool = True
+    public_demo_enabled: bool = False
+    public_demo_workspace_slug: str = "sweet-crumbs"
     pricing_catalog_version: str = "demo-2025-10"
     scheduler_secret: str | None = Field(default=None, repr=False)
     monthly_budget_myr_default: float = 200.0

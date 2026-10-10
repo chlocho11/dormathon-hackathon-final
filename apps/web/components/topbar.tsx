@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { signOut } from "@/lib/auth";
+import { PUBLIC_DEMO_ENABLED } from "@/lib/config";
 import { formatMYR } from "@/lib/format";
 import { useMe, useSettings } from "@/lib/queries";
 
@@ -38,6 +39,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
         <span>Budget period: {currentPeriod()} (Asia/Kuala_Lumpur)</span>
       </div>
       <div className="ml-auto flex items-center gap-1.5">
+        {me.data?.is_guest && <span className="text-xs text-muted-foreground">Guest · read-only</span>}
         <span className="flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-[13px]">
           <Wallet className="size-3.5 text-muted-foreground" aria-hidden />
           <span className="text-muted-foreground">Budget</span>
@@ -62,7 +64,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-60">
             <DropdownMenuLabel className="font-normal">
-              <p className="truncate text-sm font-medium">{me.data?.email ?? "Signed in"}</p>
+              <p className="truncate text-sm font-medium">{me.data?.email ?? (me.data?.is_guest ? "Public visitor" : "Signed in")}</p>
               <p className="text-xs capitalize text-muted-foreground">
                 {m ? `${m.role} · ${m.workspace_name}` : "No workspace"}
               </p>
@@ -70,12 +72,13 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={async () => {
+                if (me.data?.is_guest) { router.push("/login"); return; }
                 await signOut();
                 qc.clear();
-                router.replace("/login");
+                router.replace(PUBLIC_DEMO_ENABLED ? "/overview" : "/login");
               }}
             >
-              <LogOut className="size-4" /> Sign out
+              <LogOut className="size-4" /> {me.data?.is_guest ? "Owner sign in" : "Sign out"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

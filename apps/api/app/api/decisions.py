@@ -72,7 +72,10 @@ def compare(body: CompareRequest, principal: CurrentUser, session: DbSession) ->
         run_scenario(session, run, a, body.assumptions.model_dump(exclude_none=True), cache_eval)[1]
         for a in body.actions
     ]
-    session.commit()
+    if principal.is_guest:
+        session.rollback()
+    else:
+        session.commit()
     return {"forecast_run_id": str(run.id), "scenarios": results}
 
 

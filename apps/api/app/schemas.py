@@ -87,6 +87,7 @@ class MembershipOut(BaseModel):
 
 
 class MeResponse(BaseModel):
+    is_guest: bool = False
     user_id: uuid.UUID
     email: str | None
     memberships: list[MembershipOut]

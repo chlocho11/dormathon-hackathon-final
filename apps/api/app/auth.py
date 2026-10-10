@@ -13,7 +13,7 @@ from functools import lru_cache
 from typing import Annotated, Literal
 
 import jwt
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_session
 from app.errors import ApiError
-from app.models import WorkspaceMember
+from app.models import Workspace, WorkspaceMember
 
 DEV_ISSUER = "tokenguard-dev"
 CHAT_AUDIENCE = "tokenguard-chat"
@@ -34,6 +34,7 @@ _bearer = HTTPBearer(auto_error=False)
 class Principal:
     user_id: uuid.UUID
     email: str | None = None
+    is_guest: bool = False
 
 
 @dataclass(frozen=True)
@@ -149,8 +150,19 @@ def bearer_token(creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_
     return creds.credentials
 
 
-def current_user(token: Annotated[str, Depends(bearer_token)]) -> Principal:
-    return decode_user_token(token)
+def current_user(
+    request: Request, creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
+) -> Principal:
+    if request.headers.get("Authorization"):
+        if creds is None:
+            raise _unauthorized()
+        return decode_user_token(creds.credentials)
+    if get_settings().public_demo_enabled:
+        # Scenario previews are calculated in a rolled-back transaction, without storing data.
+        if request.method != "GET" and request.url.path != "/api/v1/scenarios/compare":
+            raise ApiError(403, "read_only", "Public access is read-only. Sign in as an owner to make changes.")
+        return Principal(uuid.UUID("00000000-0000-4000-8000-0000000000ff"), is_guest=True)
+    raise _unauthorized()
 
 
 def get_membership(session: Session, workspace_id: uuid.UUID, user_id: uuid.UUID) -> Membership | None:
@@ -166,6 +178,15 @@ def require_member(
     session: Session, principal: Principal, workspace_id: uuid.UUID | None, role: Role | None = None
 ) -> Membership:
     """Resolve the workspace (defaulting to the user's only one) and enforce membership/role."""
+    if principal.is_guest:
+        public_id = session.scalar(
+            select(Workspace.id).where(Workspace.slug == get_settings().public_demo_workspace_slug)
+        )
+        if public_id is None or (workspace_id is not None and workspace_id != public_id):
+            raise ApiError(404, "not_found", "Workspace not found.")
+        if role == "owner":
+            raise ApiError(403, "read_only", "Public access is read-only.")
+        return Membership(public_id, principal.user_id, "viewer")
     if workspace_id is None:
         ids = session.scalars(
             select(WorkspaceMember.workspace_id).where(WorkspaceMember.auth_user_id == principal.user_id)

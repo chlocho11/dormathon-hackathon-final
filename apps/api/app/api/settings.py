@@ -24,6 +24,11 @@ router = APIRouter(tags=["settings"])
 
 @router.get("/me", response_model=MeResponse)
 def me(principal: CurrentUser, session: DbSession) -> MeResponse:
+    if principal.is_guest:
+        membership = require_member(session, principal, None)
+        ws = session.get(Workspace, membership.workspace_id)
+        return MeResponse(user_id=principal.user_id, email=None, is_guest=True,
+                          memberships=[MembershipOut(workspace_id=ws.id, workspace_name=ws.name, role="viewer")])
     rows = session.execute(
         select(WorkspaceMember.workspace_id, Workspace.name, WorkspaceMember.role)
         .join(Workspace, Workspace.id == WorkspaceMember.workspace_id)

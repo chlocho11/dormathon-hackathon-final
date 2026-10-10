@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ApiError } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { PUBLIC_DEMO_ENABLED } from "@/lib/config";
 import { useMe } from "@/lib/queries";
 import { AppSidebar } from "./app-sidebar";
 import { ErrorState, LoadingBlock } from "./states";
@@ -19,7 +20,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     getAccessToken().then((t) => {
       setHasToken(Boolean(t));
-      if (!t) router.replace("/login");
+      if (!t && !PUBLIC_DEMO_ENABLED) router.replace("/login");
     });
   }, [router]);
 
@@ -27,14 +28,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (me.error instanceof ApiError && me.error.status === 401) router.replace("/login");
   }, [me.error, router]);
 
-  if (hasToken === null || (hasToken && me.isLoading)) {
+  if (hasToken === null || ((hasToken || PUBLIC_DEMO_ENABLED) && me.isLoading)) {
     return (
       <div className="mx-auto max-w-6xl p-8">
         <LoadingBlock rows={4} />
       </div>
     );
   }
-  if (!hasToken) return null;
+  if (!hasToken && !PUBLIC_DEMO_ENABLED) return null;
 
   return (
     <div className="flex min-h-screen">
