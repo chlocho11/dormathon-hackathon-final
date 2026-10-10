@@ -6,7 +6,7 @@ provider) the holdout group's average cost is used as the counterfactual instead
 traffic is flagged: its costs come from mock token estimates, not real provider usage.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -21,6 +21,7 @@ CACHE_PROVIDER = "tokenguard-cache"
 
 def measure(session: Session, workspace_id, cache_eval: dict | None) -> dict:
     s = get_settings()
+    now = datetime.now(UTC)
     id_to_name, _ = app_maps(session, workspace_id)
     out = []
     for p in session.scalars(select(Policy).where(Policy.workspace_id == workspace_id,
@@ -29,7 +30,7 @@ def measure(session: Session, workspace_id, cache_eval: dict | None) -> dict:
         if p.approved_at is None:
             out.append({"application": app, "status": "never_enabled", "policy_enabled": p.enabled})
             continue
-        since = p.approved_at
+        since = max(p.approved_at, now - timedelta(days=s.request_retention_days))
         rows = session.execute(
             select(ApiRequest.cache_status, ApiRequest.cache_decision, ApiRequest.provider,
                    ApiRequest.request_category, ApiRequest.estimated_cost_myr)
@@ -58,7 +59,7 @@ def measure(session: Session, workspace_id, cache_eval: dict | None) -> dict:
         else:
             unit = avg_faq_cost
             method = "observational estimate: hits x average cost of static_faq provider calls (not a controlled test)"
-        days = max(1.0, (datetime.now(UTC) - since).total_seconds() / 86400)
+        days = max(1.0, (now - since).total_seconds() / 86400)
         lookups = sum(r.request_category == "static_faq" for r in rows)
         overhead = lookups * s.cache_overhead_per_lookup_myr + s.cache_fixed_daily_myr * days
         avoided = len(hits) * unit if unit is not None else None
@@ -84,5 +85,8 @@ def measure(session: Session, workspace_id, cache_eval: dict | None) -> dict:
         "applications": out,
         "safe_hit_precision_on_test_set": None if cache_eval is None else cache_eval.get("hit_precision"),
         "adversarial_false_hits_on_test_set": None if cache_eval is None else cache_eval.get("adversarial_false_hits"),
-        "note": "Savings are estimates. Use holdout (owner opt-in) for a controlled counterfactual.",
+        "note": (
+            f"Savings are estimates within the {s.request_retention_days}-day metadata retention window "
+            "since approval. Use holdout (owner opt-in) for a controlled counterfactual."
+        ),
     }

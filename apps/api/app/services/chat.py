@@ -78,11 +78,14 @@ def build_system_prompt(faqs: list[FaqEntry], version: int) -> str:
 def handle_chat(
     session: Session, provider: ChatProvider, app: Application, message: str, locale: str,
     client_key: str | None = None,
+    baseline_for: Application | None = None,
 ) -> ChatResult:  # fmt: skip
     settings = get_settings()
     ws = session.get(Workspace, app.workspace_id)
     assert ws is not None
-    faqs = active_faqs(session, app, ws)
+    if baseline_for is not None and baseline_for.workspace_id != app.workspace_id:
+        raise ApiError(404, "not_found", "Application not found.")
+    faqs = active_faqs(session, baseline_for or app, ws)
     phrases = {normalize_for_exact_match(p) for f in faqs for p in [f.question, *f.aliases]}
     category = categorize(message, phrases)
     fp = usage_logger.fingerprint(ws.id, message)
@@ -108,6 +111,19 @@ def handle_chat(
     )
 
     start = time.perf_counter()
+    if baseline_for is not None:
+        base.update(cache_decision="comparison_baseline")
+        return _complete_provider(
+            session,
+            provider,
+            ws,
+            faqs,
+            message,
+            base,
+            request_id,
+            "bypass",
+            "comparison_baseline",
+        )
     policy = faq_cache.cache_policy(session, app)
     decision = faq_cache.decide(session, app, ws, policy, message, locale, fp)
     enabled = bool(policy and policy.enabled)
@@ -144,6 +160,16 @@ def handle_chat(
     else:
         cache_status, label = "miss", decision.decision
     base.update(cache_decision=label, faq_intent_key=decision.intent_key, similarity_score=decision.similarity)
+    return _complete_provider(session, provider, ws, faqs, message, base, request_id, cache_status, label, decision)
+
+
+def _complete_provider(
+    session: Session, provider: ChatProvider, ws: Workspace, faqs: list[FaqEntry], message: str,
+    base: dict, request_id: uuid.UUID, cache_status: str, label: str,
+    decision: faq_cache.CacheDecision | None = None,
+) -> ChatResult:  # fmt: skip
+    settings = get_settings()
+    rates = get_rates(session, provider.model, base["pricing_version"])
     try:
         resp = provider.complete(
             build_system_prompt(faqs, ws.knowledge_version), message, settings.chat_max_output_tokens
@@ -184,6 +210,6 @@ def handle_chat(
     )
     session.commit()
     return ChatResult(
-        request_id, resp.text, cache_status, resp.usage, cost, resp.provider, category, label,
-        decision.intent_key, decision.similarity,
+        request_id, resp.text, cache_status, resp.usage, cost, resp.provider, base["request_category"], label,
+        decision.intent_key if decision else None, decision.similarity if decision else None,
     )  # fmt: skip

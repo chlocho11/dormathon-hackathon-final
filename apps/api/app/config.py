@@ -8,7 +8,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=(".env", "../../.env"), extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(".env", "../../.env", "../../.env.anthropic.local", ".env.anthropic.local"),
+        extra="ignore",
+    )
 
     app_env: Literal["development", "test", "production"] = "development"
     database_url: str = "postgresql+psycopg://tokenguard:tokenguard@localhost:5432/tokenguard"
@@ -30,6 +33,8 @@ class Settings(BaseSettings):
     pricing_catalog_version: str = "demo-2025-10"
     scheduler_secret: str | None = Field(default=None, repr=False)
     monthly_budget_myr_default: float = 200.0
+    request_retention_days: int = Field(default=30, ge=1)
+    aggregate_retention_days: int = Field(default=180, ge=30)
 
     # Signs short-lived, scoped BakeryBot chat tokens. Falls back to DEV_JWT_SECRET outside production.
     chat_token_secret: str | None = Field(default=None, repr=False)

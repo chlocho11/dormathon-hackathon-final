@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { appLabel, categoryLabel, formatDateTime, formatDay, formatMYR, formatMetric, formatPct, titleCase } from "@/lib/format";
-import { qk, useDrivers, useForecast } from "@/lib/queries";
+import { useDrivers, useForecast } from "@/lib/queries";
 import { RISK } from "@/lib/risk";
 import type { Forecast } from "@/lib/types";
 

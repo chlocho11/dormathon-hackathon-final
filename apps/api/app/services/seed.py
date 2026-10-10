@@ -5,7 +5,7 @@ Synthetic usage history is loaded separately (Phase 2) and always labelled data_
 
 import json
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -31,7 +31,11 @@ def load_json(name: str) -> dict:
 
 
 def ensure_pricing(session: Session) -> None:
-    data = load_json("pricing.json")
+    for name in ("pricing.json", "pricing_live.json"):
+        _ensure_pricing_catalog(session, load_json(name))
+
+
+def _ensure_pricing_catalog(session: Session, data: dict) -> None:
     for m in data["models"]:
         exists = session.scalar(
             select(PricingCatalog.id).where(
@@ -52,7 +56,7 @@ def ensure_pricing(session: Session) -> None:
                 cache_read_usd_per_million=Decimal(str(m["cache_read_usd_per_million"])),
                 cache_write_usd_per_million=Decimal(str(m["cache_write_usd_per_million"])),
                 source_url=m["source_url"],
-                verified_at=None,
+                verified_at=datetime.fromisoformat(m["verified_at"]) if m.get("verified_at") else None,
                 version=data["version"],
             )
         )

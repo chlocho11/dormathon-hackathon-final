@@ -1,0 +1,16 @@
+{
+  "version": "anthropic-2026-10-11",
+  "currency": "USD",
+  "note": "Claude Haiku 4.5 rates checked against official Claude Platform pricing on 2026-10-11. MYR conversion remains the configured fixed estimate, not a live exchange rate.",
+  "models": [{
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5-20251001",
+    "effective_from": "2026-10-11",
+    "verified_at": "2026-10-11T00:00:00+00:00",
+    "input_usd_per_million": 1.0,
+    "output_usd_per_million": 5.0,
+    "cache_read_usd_per_million": 0.1,
+    "cache_write_usd_per_million": 1.25,
+    "source_url": "https://platform.claude.com/docs/en/about-claude/pricing"
+  }]
+}

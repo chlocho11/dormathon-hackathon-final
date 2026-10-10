@@ -15,7 +15,17 @@ Full specification: [MASTER_BUILD_PACK.md](MASTER_BUILD_PACK.md). Progress and v
 
 ## Local setup
 
-Prerequisites: Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node 22, and either Docker or nothing else (see the Docker-free option).
+After dependencies are installed, `python scripts/local_demo.py` prepares a separate
+embedded demo database, generates/evaluates synthetic history, and launches API/web
+in mock mode. See [the runbook](docs/deployment.md) for verification and manual setup.
+If port 3000 is occupied, use `python scripts/local_demo.py --web-port 3001`.
+On subsequent runs, add `--skip-prepare` to reuse the prepared database and evaluation.
+For real Anthropic chat, paste your key into the git-ignored root `.env.anthropic.local`,
+then restart with `python scripts/local_demo.py --web-port 3001 --skip-prepare --live`.
+Owner sign-in enables side-by-side direct-provider versus TokenGuard replies with session
+token/cost totals. Each comparison makes up to two billed calls. See the runbook for details.
+
+Prerequisites: Python 3.12 with [uv](https://docs.astral.sh/uv/), Node 24, and either Docker or the embedded PostgreSQL option.
 
 ```bash
 cp .env.example .env                 # leave ANTHROPIC_API_KEY empty for mock mode
@@ -66,9 +76,22 @@ Without Supabase configured, `POST /api/v1/auth/dev-login {"role":"owner"|"viewe
 
 ## Checks
 
+The dashboard has API-backed Overview, Predictions, Anomalies, Decision Lab, Usage Explorer,
+Evaluation and Settings. BakeryBot is at `/demo/chat`. Use demo owner/viewer sign-in locally;
+hosted sign-in uses Supabase. The current verification state is in IMPLEMENTATION_STATUS.md.
+
 ```bash
 cd apps/api && uv run ruff check . && uv run ruff format --check . && uv run pytest
 cd apps/web && npm run lint && npm run typecheck && npm run build
 ```
 
 API tests run against real PostgreSQL + pgvector: `TEST_DATABASE_URL` if set (as in CI), otherwise an embedded server started automatically. Tests never call the real Anthropic API.
+
+Frontend data tests: `cd apps/web`, then `npm test` (Node 24 recommended).
+Browser smoke with a seeded local mock API and web running:
+`npx playwright install chromium`, then `npm run test:e2e`.
+This approves and then disables local demo policies; use a disposable demo workspace.
+
+See [deployment runbook](docs/deployment.md), [three-minute demo](docs/demo_script.md),
+[architecture](docs/architecture.md), [security notes](docs/security.md), and
+[rubric evidence](docs/rubric_evidence.md).

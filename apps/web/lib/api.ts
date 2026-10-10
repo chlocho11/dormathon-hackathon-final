@@ -7,6 +7,7 @@ import type {
   ApiErrorBody,
   AuditEntry,
   ChatResponse,
+  ChatComparison,
   ChatSession,
   Drivers,
   EvaluationLatest,
@@ -104,6 +105,8 @@ export const api = {
   invalidateFaq: () => apiFetch<{ knowledge_version: number }>("/faq/invalidate", { method: "POST" }),
   demoReset: () => apiFetch<{ status: string }>("/demo/reset", { method: "POST" }),
   chatSession: () => apiFetch<ChatSession>("/chat/session", { method: "POST", auth: false }),
+  chatCompare: (application_id: string, message: string) =>
+    apiFetch<ChatComparison>("/chat/compare", { method: "POST", body: { application_id, message, locale: "en" } }),
   chat: (token: string, application_id: string, message: string) =>
     apiFetch<ChatResponse>("/chat", { method: "POST", token, body: { application_id, message, locale: "en" } }),
 };

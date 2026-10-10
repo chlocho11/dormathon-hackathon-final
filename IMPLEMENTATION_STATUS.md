@@ -1,6 +1,6 @@
 # Implementation Status
 
-_Last updated: 2026-10-10_
+_Last updated: 2026-10-11_
 
 | Phase | Status |
 |---|---|
@@ -8,8 +8,77 @@ _Last updated: 2026-10-10_
 | 1. Database & Gateway | Done (mock provider; real Anthropic call not yet verified, no key supplied) |
 | 2. Data & ML | Done (all metrics on synthetic data) |
 | 3. Decision & Cache | Done (mock provider) |
-| 4. Dashboard | Next (route skeleton only) |
-| 5. E2E, Deploy, Demo | Not started |
+| 4. Dashboard | Done locally: functional screens, build and desktop/mobile browser smoke passed |
+| 5. E2E, Deploy, Demo | Local fallback verified; CI configuration and demo/runbooks ready; hosting deferred by user |
+
+## Phase 4/5 continuation (2026-10-11)
+
+### Live-key setup and chatbot comparison (2026-10-11)
+- Created the local git-ignored root `.env.anthropic.local` for the user's key and a tracked empty `.env.anthropic.local.example` for new checkouts. Backend Settings loads the private file. No key was supplied or printed; `git check-ignore` confirmed exclusion.
+- Added explicit launcher `--live`: checks key presence, validates configured model at API startup, disables SDK retries, strips backend secrets from the web child, and uses verified Haiku 4.5 catalog `anthropic-2026-10-11`. Default launcher remains mock. Fast restarts now apply migrations/bootstrap while skipping only heavy seed/evaluation.
+- Added owner-only `/chat/compare`. It reserves two rate-limit slots, uses the same question/model/facts/output cap, always sends the baseline to the provider, and sends the optimized arm through the existing approved cache policy. The baseline ledger uses separate `bakery_demo_baseline` application; both arms count toward actual workspace spend. Failure in one arm preserves the other's reply/usage. No raw questions are persisted and no schema migration was needed.
+- Chatbot now has responsive two-column replies and cumulative per-session input/output tokens, estimated MYR provider cost, provider-call/cache-hit counts, successful-pair cost difference, reset and single-chat mode. Mock/live and policy status are visible. Unknown/failed usage is excluded and labelled; cost difference excludes local overhead and is not guaranteed net savings. Reload/reset starts fresh UI counters; recorded ledger usage remains.
+- Verified: **154 backend tests passed** (155.16 s; one optional PySocks warning), **5 frontend data tests passed**, full typecheck/lint/production build passed, launcher ruff/format and diff checks passed. Live launcher with an empty key rejected startup with an actionable message and made no provider call.
+- Updated Chromium E2E passed: compares provider baseline with cache-hit zero tokens, checks accumulation after unsafe provider bypass, resets totals, and checks 360px mobile layout alongside existing dashboard/approval/viewer/error flow. Desktop/mobile comparison screenshots saved and visually inspected at `apps/web/test-results/screenshots/chat-desktop.png` and `chat-mobile.png`.
+- Updated mock demo running at **http://localhost:3001/demo/chat**, API at **http://localhost:8000**. Cache policies were disabled after E2E so the next owner can demonstrate approval. Actual live Anthropic authentication/generation remains unverified until the user supplies a key and starts `--live`; no paid call was made in this work.
+- Next user action: paste key after `ANTHROPIC_API_KEY=` in `.env.anthropic.local`, stop the existing demo and run `python scripts/local_demo.py --web-port 3001 --skip-prepare --live`; sign in as owner and approve caching in Decision Lab before testing FAQ savings.
+
+### Final local-demo continuation
+- User chose to finish the local demo first; Supabase/Render/Vercel hosting is not set up. No public deployment is claimed.
+- Real Chromium browser smoke passed three times, including against the final combined launcher: owner/viewer login, backend forecast reconciliation, usage filters/CSV, budget save, scenario slider/API updates, approval confirmation/persisted policies, safe FAQ cache hit, order-query provider bypass, evaluation, 360px mobile navigation/no overflow, and deliberate API error state. No uncaught page exceptions. Final automated browser flow took **54.4 seconds**; this is automation timing, not a timed human presentation. Policies were disabled afterward for the next approval demo.
+- Desktop Overview and mobile Settings screenshots were visually inspected. Generated screenshots: `apps/web/test-results/screenshots/` (git-ignored).
+- Added configurable workspace-scoped 30-day request / 180-day aggregate retention and expired-cache cleanup to the daily pipeline. Fixed aggregation so older totals survive metadata deletion. Measurement and overhead now use the same retained window; Decision Lab explains that window.
+- Retention regression initially passed alone but failed against existing seeded rows; it was isolated to the unseeded workspace. The subsequent complete 149-test run passed; both retention/measurement regressions and approval checks then passed together (11 tests). Final backend run: **150 passed in 149.83 seconds**, real PostgreSQL/pgvector and mock provider. Ruff and formatting passed.
+- Patched PostCSS to 8.5.29, removed unused `cn`, moved shadcn build/generator tooling to dev dependencies, and pinned Playwright. Production audit (`npm audit --omit=dev`) reports **0 vulnerabilities**. Full audit retains **9 high development-tool findings** from the unpatched braces advisory; exposure and upstream follow-up are documented in `docs/security.md`. No breaking downgrade was applied.
+- Combined launcher migrated, seeded/evaluated and started API/web at port 3001. It rejects occupied ports before modifying demo data and accepts port overrides. API-child termination caused the launcher to stop its web child and release both ports; sibling port 3000 was left intact. `--skip-prepare` supports fast restarts after successful preparation.
+- A clean production build passed after terminating this project's orphaned Windows Next.js dev child. Final lint, full typecheck, and production build passed after the measurement copy update. Frontend data tests: **3 passed**.
+- Final localhost checks: API health `ok`, provider `mock`, persisted forecast `ok`, measurement note reflects 30-day retention, login HTTP 200. The combined launcher is running at **http://localhost:3001/login** and API **http://localhost:8000**; fast restart was verified with `--skip-prepare`.
+
+### Hotspot follow-up: npm blocker resolved (earlier evidence)
+- `npm ci` succeeded after switching networks (711 packages installed). Certificate verification remained enabled.
+- Full `npm run typecheck` passed after correcting request-origin typing to the backend's real/synthetic enum. All 3 frontend data tests passed again.
+- `npm run build` passed and generated all routes. Lint had no errors; its sole unused-import warning was removed and lint rerun.
+- Development frontend started at **http://localhost:3001/login** (port 3000 belongs to the sibling dormathon-hackathon project); HTTP login route returned 200. Mock API started at http://localhost:8000 with CORS configured for ports 3000 and 3001.
+- Local demo preparation reran successfully with the same synthetic dataset and stored evaluation.
+- Initial npm install reported 11 dependency vulnerabilities; the final local-demo continuation above supersedes this audit and pending-browser status.
+
+### Implemented
+- Preserved merged Phase 4 login/auth, shell, Overview, Predictions, Anomalies and Decision Lab.
+- Usage Explorer now reads daily aggregates and paginated metadata, filters date/app/model/category/origin, sorts loaded requests, shows origin-separated cost chart/totals and exports sanitized CSV. Request calendar filters use Kuala Lumpur dates.
+- Evaluation now displays persisted held-out baseline scores, backtest curves, interval coverage, anomaly confusion matrix/precision/recall/delay, adversarial cache quality and forecast training proportions. No-result state remains until evaluation exists. Added a readable model-card route.
+- Settings now supports owner-only budget edits, safe threshold/TTL/holdout edits, emergency disable, confirmed key creation/rotation, confirmed FAQ invalidation and demo-only confirmed reset. Keys are shown once. Viewers see restrictions.
+- BakeryBot uses a short-lived scoped token, sample prompts and real gateway responses, with cache/provider labels and token/cost metadata. Errors preserve the question for a manual resend; no automatic billed retry.
+- Removed missing PagePlaceholder imports. Removed build-time Google font fetch; the specified system-sans fallback is used. Clarified gateway-origin badges because mock traffic is not proof of paid API calls.
+- Added data-helper tests, a real local API/Playwright smoke runner, a CI E2E job, Windows-capable local mock launcher, architecture/security/deployment/demo/rubric docs, and a working Make demo replay command.
+
+### Verified in this continuation
+| Check | Result |
+|---|---|
+| API `uv run ruff check .`, `ruff format --check .` | pass; 71 files formatted |
+| API `uv run pytest` | **148 passed**, 2 Windows Hugging Face symlink-cache warnings; 276.30 s; real embedded PostgreSQL/pgvector, mock Anthropic |
+| Web `npm test` | **3 passed**: CSV safety, Kuala Lumpur day boundary, combined filtering/totals and provenance |
+| Strict TypeScript check of usage helper and API types | pass |
+| TSX transpilation syntax checks of five new screens/components | 0 diagnostics; this is not full typecheck/build evidence |
+| E2E runner `node --check`, CI YAML parse, `git diff --check` | pass |
+| Local launcher `python scripts/local_demo.py --prepare-only` | pass: migrations 0001–0003, bootstrap, 4,660 synthetic daily rows, persisted evaluation, forecast `ok`, 13 anomaly events |
+| Local launcher ruff + format | pass |
+| HTTP smoke against seeded local API | pass: health/database ok, semantic matching available, scoped chat token, mock reply/token cost, token denied on owner endpoint |
+| HTTP approval/cache replay | pass: identical 10 prompts, **10 → 3 provider calls**, 7 approved FAQ hits, personal/order/numeric bypasses; owner approval HTTP 200, policies disabled afterward |
+
+**Refreshed evaluation:** seed 42, 180 fully synthetic days, **2026-04-14..2026-10-10**. Generated [evaluation report](docs/evaluation_report.md) now reflects this dataset rather than the previous day's run. Test workspace WAPE: previous-day 0.373, seasonal 0.361, rolling mean 0.339, HGB 0.338. Nominal 90% interval coverage: segment-days 81.4%, cumulative totals **55.4%** (under-coverage). Anomaly precision 1.000, recall 0.882, event recall 1.000, 0 false alerts/30 days. Cache hit precision 1.000, 0 false hits, positive coverage 0.800. Forecast-based simulator error 44.7%; synthetic results are not evidence of production performance.
+
+**Local recommendation replay:** stored forecast RM278.52 against RM200 budget; caching scenario approximately RM253.85, net estimated savings RM24.67 (assumption sensitivity RM13.87–37.23). The recommendation explicitly says the budget is still exceeded. Provider mode was mock; these are estimated accounting values, not actual paid savings.
+
+### Earlier setup failures and remaining limits
+- The earlier npm certificate failure was resolved by changing to a hotspot; full frontend checks now pass as recorded above. Earlier `npm ci` failed with `UNABLE_TO_VERIFY_LEAF_SIGNATURE` (Fortinet issuer `FG6H1FTB22901592`); system-CA/offline retries failed. Chromium and browser smoke now work.
+- Earlier lint/build/typecheck attempts failed because of missing dependencies; installation and full checks now succeeded.
+- Browser runner passed locally and generated screenshots; GitHub-hosted CI itself has not been run in this session.
+- Combined launcher startup and child-failure cleanup are verified. Real interactive terminal Ctrl+C was not separately exercised by the automation harness.
+- No real Anthropic call or live Supabase/Render/Vercel deployment was performed. Cloud accounts/credentials and pricing/model verification remain required.
+- P1 streaming/provider prompt caching/routing remain deferred. Automated retention now runs with the secured daily job; a hosted scheduler still needs account setup.
+
+### Next actions
+The requested local fallback is working and left running. For public release later: provision Supabase/Render/Vercel, configure real auth/provider secrets and daily scheduler, verify model/pricing, then perform hosted HTTP/browser checks. Track the development-tool advisory upstream. A timed human three-minute presentation/recording has not been performed; the complete browser flow and three-minute script are available.
 
 ## Phase 3: Decision & Cache (done)
 
@@ -135,5 +204,5 @@ Monorepo per §4; FastAPI app factory with error envelope, request IDs, security
 
 Environment notes: this machine has no Docker or `make`; `uv` was installed via pip (`python3 -m uv`). The API is pinned to Python 3.12 (uv-managed).
 
-## Next: Phase 4 (Dashboard)
-All P0 screens wired to the API (Overview, Predictions, Anomalies, Decision Lab with sliders and approval modal, Usage Explorer, Evaluation, Demo Chatbot, Settings), shadcn/ui components, Recharts, provenance badges, and loading/empty/error states.
+## Next: finish current verification
+The dashboard screens now build successfully. Complete browser smoke and visual inspection before marking Phase 4 complete. Cloud deployment still needs account access and live smoke evidence.

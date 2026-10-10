@@ -14,7 +14,8 @@ import pytest
 # Tests must never call real Anthropic or require cloud accounts.
 os.environ["APP_ENV"] = "test"
 os.environ["ANTHROPIC_MODE"] = "mock"
-os.environ.pop("ANTHROPIC_API_KEY", None)
+os.environ["ANTHROPIC_API_KEY"] = ""
+os.environ["ANTHROPIC_MODEL"] = "claude-haiku-4-5-20251001"
 os.environ.pop("SUPABASE_JWKS_URL", None)
 os.environ["DEMO_MODE"] = "true"
 

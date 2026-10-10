@@ -49,10 +49,69 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm audit --omit=dev
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: tokenguard
+          POSTGRES_PASSWORD: tokenguard
+          POSTGRES_DB: tokenguard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tokenguard"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      APP_ENV: development
+      DEMO_MODE: "true"
+      ANTHROPIC_MODE: mock
+      DATABASE_URL: postgresql+psycopg://tokenguard:tokenguard@localhost:5432/tokenguard
+      EMBEDDING_CACHE_DIR: ${{ github.workspace }}/apps/api/.models
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: uv sync
+        working-directory: apps/api
+      - run: uv run alembic upgrade head
+        working-directory: apps/api
+      - run: uv run python ../../scripts/seed_demo.py --evaluate --predict
+        working-directory: apps/api
+      - run: npm ci
+        working-directory: apps/web
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - run: npm run build
+        working-directory: apps/web
+      - run: uv run uvicorn app.main:app --port 8000 > /tmp/tokenguard-api.log 2>&1 &
+        working-directory: apps/api
+      - run: npm run start > /tmp/tokenguard-web.log 2>&1 &
+        working-directory: apps/web
+      - run: curl --retry 30 --retry-delay 2 --retry-connrefused --fail http://localhost:8000/api/v1/health
+      - run: curl --retry 30 --retry-delay 2 --retry-connrefused --fail http://localhost:3000/login
+      - run: npm run test:e2e
+        working-directory: apps/web
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-smoke-screenshots
+          path: apps/web/test-results

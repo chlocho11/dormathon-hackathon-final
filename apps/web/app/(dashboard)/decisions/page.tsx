@@ -225,7 +225,8 @@ export default function DecisionLabPage() {
           </Card>
           <Card className="py-5 shadow-[var(--shadow-soft)]">
             <CardContent>
-              <SectionTitle aside={<span className="text-xs text-muted-foreground">since approval</span>}>Measurement</SectionTitle>
+              <SectionTitle aside={<span className="text-xs text-muted-foreground">retained traffic since approval</span>}>Measurement</SectionTitle>
+              <p className="mb-3 text-xs text-muted-foreground">{measurement.data?.note}</p>
               {measurement.data?.applications.every((a) => a.status === "never_enabled") && (
                 <p className="text-sm text-muted-foreground">Nothing to measure yet: no policy has been enabled.</p>
               )}

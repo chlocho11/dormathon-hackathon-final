@@ -59,6 +59,7 @@ export function titleCase(s: string): string {
 
 export const APP_LABELS: Record<string, string> = {
   bakery_demo: "BakeryBot",
+  bakery_demo_baseline: "BakeryBot baseline",
   tuition_demo: "Tuition assistant",
   retail_demo: "Retail assistant",
 };

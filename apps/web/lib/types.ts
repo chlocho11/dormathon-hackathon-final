@@ -253,7 +253,7 @@ export type RequestRow = {
   output_tokens: number;
   estimated_cost_myr: number;
   latency_ms: number;
-  data_origin: string;
+  data_origin: "real" | "synthetic";
   faq_intent_key: string | null;
   similarity_score: number | null;
   error_code: string | null;
@@ -299,3 +299,16 @@ export type ChatResponse = {
 };
 
 export type ChatSession = { token: string; expires_at: string; application_id: string; workspace_name: string };
+
+export type ComparisonArm = { response: ChatResponse | null; error: { code: string; message: string } | null };
+export type ChatComparison = {
+  baseline: ComparisonArm;
+  tokenguard: ComparisonArm;
+  policy_enabled: boolean;
+  provider_mode: "mock" | "live";
+  model: string;
+  pricing_catalog_version: string;
+  fx_myr_per_usd: number;
+  input_usd_per_million: number;
+  output_usd_per_million: number;
+};

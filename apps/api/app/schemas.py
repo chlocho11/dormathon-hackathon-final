@@ -49,6 +49,28 @@ class ChatSessionResponse(BaseModel):
     workspace_name: str
 
 
+class ComparisonError(BaseModel):
+    code: str
+    message: str
+
+
+class ComparisonArm(BaseModel):
+    response: ChatResponse | None = None
+    error: ComparisonError | None = None
+
+
+class ChatComparisonResponse(BaseModel):
+    baseline: ComparisonArm
+    tokenguard: ComparisonArm
+    policy_enabled: bool
+    provider_mode: Literal["mock", "live"]
+    model: str
+    pricing_catalog_version: str
+    fx_myr_per_usd: float
+    input_usd_per_million: float
+    output_usd_per_million: float
+
+
 class DevLoginRequest(BaseModel):
     role: Literal["owner", "viewer"] = "owner"
 

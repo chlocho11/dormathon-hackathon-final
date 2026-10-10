@@ -45,6 +45,17 @@ def aggregate_real_usage(session: Session, ws: Workspace, through: date) -> int:
     """
     tz = ZoneInfo(ws.timezone)
     end_utc = datetime.combine(through + timedelta(days=1), time.min, tzinfo=tz)
+    # Only rebuild days whose metadata still exists. Older aggregate totals survive retention.
+    rebuild_days = {
+        timestamp.astimezone(tz).date()
+        for timestamp in session.scalars(
+            select(ApiRequest.occurred_at).where(
+                ApiRequest.workspace_id == ws.id,
+                ApiRequest.occurred_at < end_utc,
+                ApiRequest.data_origin == "real",
+            )
+        )
+    }
     reqs = session.execute(
         select(
             ApiRequest.id, ApiRequest.application_id, ApiRequest.occurred_at, ApiRequest.request_category,
@@ -55,7 +66,13 @@ def aggregate_real_usage(session: Session, ws: Workspace, through: date) -> int:
             ApiRequest.cache_status != "error", ApiRequest.data_origin == "real",
         )
     ).all()  # fmt: skip
-    session.execute(delete(DailyUsage).where(DailyUsage.workspace_id == ws.id, DailyUsage.data_origin == "real"))
+    session.execute(
+        delete(DailyUsage).where(
+            DailyUsage.workspace_id == ws.id,
+            DailyUsage.data_origin == "real",
+            DailyUsage.day.in_(rebuild_days),
+        )
+    )
     if not reqs:
         session.commit()
         return 0
