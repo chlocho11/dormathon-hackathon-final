@@ -23,7 +23,7 @@ export function PageHeader({
 
 export function SectionTitle({ children, aside }: { children: React.ReactNode; aside?: React.ReactNode }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-2">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
       <h2 className="text-[15px]">{children}</h2>
       {aside}
     </div>

@@ -28,3 +28,12 @@ def test_security_headers_present():
     assert res.headers["X-Content-Type-Options"] == "nosniff"
     assert res.headers["X-Frame-Options"] == "DENY"
     assert "X-Request-ID" in res.headers
+
+
+def test_health_is_unready_when_database_is_unavailable(monkeypatch):
+    from app.api import health
+
+    monkeypatch.setattr(health, "ping_database", lambda: "unavailable (OperationalError)")
+    res = client.get("/api/v1/health")
+    assert res.status_code == 503
+    assert res.json()["status"] == "degraded"

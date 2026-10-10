@@ -13,15 +13,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { appLabel, formatDay, formatMYR, formatPct, titleCase } from "@/lib/format";
-import { useOverview, useRecommendations } from "@/lib/queries";
+import { useHealth, useOverview, useRecommendations } from "@/lib/queries";
 import { RISK } from "@/lib/risk";
 
 export default function OverviewPage() {
   const o = useOverview();
   const recs = useRecommendations();
+  const health = useHealth();
   const f = o.data?.forecast;
   const latestRec = recs.data?.items[0];
-  const scenario = latestRec && !latestRec.superseded ? latestRec.scenario : null;
+  const scenario = latestRec && !latestRec.superseded && latestRec.forecast_run_id === f?.id ? latestRec.scenario : null;
 
   return (
     <>
@@ -30,7 +31,7 @@ export default function OverviewPage() {
         description="Month-end AI spend forecast for your workspace, what is driving it, and the safest action to take."
         badges={
           <>
-            <DataSourceBadge origin={f?.evidence_type === "real" ? "real" : "synthetic_and_real"} />
+            {f && <DataSourceBadge origin={f.evidence_type} />}
             <DataSourceBadge origin="forecast" />
           </>
         }
@@ -151,7 +152,7 @@ export default function OverviewPage() {
             </Card>
             <Card className="py-5 shadow-[var(--shadow-soft)]">
               <CardContent className="space-y-3">
-                <SectionTitle aside={<DataSourceBadge origin="real" />}>
+                <SectionTitle aside={<DataSourceBadge origin={health.data?.dependencies.anthropic.mode === "mock" ? "mock" : "real"} />}>
                   <span className="flex items-center gap-2">
                     <Activity className="size-4 text-primary" aria-hidden /> Cache policy & live traffic
                   </span>

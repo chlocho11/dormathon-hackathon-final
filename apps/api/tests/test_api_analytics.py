@@ -87,3 +87,50 @@ def test_scheduler_endpoint_requires_secret(client, monkeypatch):
     assert client.post("/api/v1/jobs/daily").status_code == 401
     monkeypatch.setattr(get_settings(), "scheduler_secret", "s3cret-value")
     assert client.post("/api/v1/jobs/daily", headers={"X-Scheduler-Secret": "wrong"}).status_code == 401
+
+
+def test_usage_request_filters_keep_pagination_and_totals_scoped(
+    client, owner_headers, other_owner_headers, chat_headers, bakery_app, session
+):
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.models import ApiRequest
+
+    for msg in ("What time do you open?", "Do you deliver?", "Tell me a joke"):
+        response = client.post(
+            "/api/v1/chat", json={"application_id": str(bakery_app.id), "message": msg}, headers=chat_headers
+        )
+        assert response.status_code == 200
+    rows = list(session.scalars(select(ApiRequest).order_by(ApiRequest.occurred_at)))
+    # Kuala Lumpur midnight is 16:00 UTC the previous day. End date is inclusive.
+    for row, stamp in zip(
+        rows, ("2026-10-09T15:59:00+00:00", "2026-10-09T16:00:00+00:00", "2026-10-10T15:59:00+00:00"), strict=True
+    ):
+        row.occurred_at = datetime.fromisoformat(stamp).astimezone(UTC)
+    session.commit()
+    params = {"from": "2026-10-10", "to": "2026-10-10", "application": "bakery_demo", "data_origin": "real", "limit": 1}
+    first = client.get("/api/v1/usage/requests", params=params, headers=owner_headers).json()
+    assert first["total"] == 2 and len(first["items"]) == 1 and first["next_cursor"]
+    second = client.get(
+        "/api/v1/usage/requests", params={**params, "cursor": first["next_cursor"]}, headers=owner_headers
+    ).json()
+    assert second["total"] == 2 and len(second["items"]) == 1 and second["next_cursor"] is None
+    assert first["items"][0]["id"] != second["items"][0]["id"]
+    for filters in (
+        {"application": "missing"},
+        {"model": "missing"},
+        {"request_category": "missing"},
+        {"data_origin": "synthetic"},
+    ):
+        empty = client.get("/api/v1/usage/requests", params={**params, **filters}, headers=owner_headers).json()
+        assert empty["items"] == [] and empty["total"] == 0
+    other = client.get("/api/v1/usage/requests", params=params, headers=other_owner_headers).json()
+    assert other["items"] == [] and other["total"] == 0
+
+
+def test_usage_rejects_reversed_date_range(client, owner_headers):
+    for endpoint in ("daily", "requests"):
+        res = client.get(f"/api/v1/usage/{endpoint}?from=2026-10-11&to=2026-10-10", headers=owner_headers)
+        assert res.status_code == 422

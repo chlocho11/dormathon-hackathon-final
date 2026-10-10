@@ -55,7 +55,7 @@ export async function apiFetch<T>(path: string, opts: Opts = {}): Promise<T> {
   }
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as ApiErrorBody | null;
-    throw new ApiError(res.status, body?.error.code ?? "http_error", body?.error.message ?? res.statusText, body?.error.request_id);
+    throw new ApiError(res.status, body?.error?.code ?? "http_error", body?.error?.message ?? res.statusText, body?.error?.request_id);
   }
   return (await res.json()) as T;
 }
@@ -76,10 +76,10 @@ export const api = {
   drivers: (id: string) => apiFetch<Drivers>(`/forecasts/${id}/drivers`),
   anomalies: (severity?: string) => apiFetch<Paged<Anomaly>>(`/anomalies${q({ severity })}`),
   acknowledge: (id: string) => apiFetch<{ id: string; acknowledged_at: string }>(`/anomalies/${id}/acknowledge`, { method: "POST" }),
-  compare: (assumptions: Record<string, unknown>) =>
+  compare: (assumptions: Record<string, unknown>, forecast_run_id: string) =>
     apiFetch<{ forecast_run_id: string; scenarios: Scenario[] }>("/scenarios/compare", {
       method: "POST",
-      body: { actions: ["none", "semantic_cache"], assumptions },
+      body: { forecast_run_id, actions: ["none", "semantic_cache"], assumptions },
     }),
   recommendations: () => apiFetch<Paged<Recommendation>>("/recommendations"),
   generateRecommendation: () => apiFetch<Recommendation>("/recommendations/generate", { method: "POST" }),
@@ -96,7 +96,9 @@ export const api = {
   evaluation: () => apiFetch<EvaluationLatest>("/evaluation/latest"),
   usageDaily: (params: { from?: string; to?: string; data_origin?: string }) =>
     apiFetch<Paged<UsageDailyRow>>(`/usage/daily${q(params)}`),
-  usageRequests: (cursor?: string | null) => apiFetch<Paged<RequestRow>>(`/usage/requests${q({ cursor, limit: 50 })}`),
+  usageRequests: (cursor?: string | null, filters: {
+    from?: string; to?: string; application?: string; model?: string; request_category?: string; data_origin?: string;
+  } = {}) => apiFetch<Paged<RequestRow>>(`/usage/requests${q({ ...filters, cursor, limit: 50 })}`),
   settings: () => apiFetch<WorkspaceSettings>("/settings/workspace"),
   patchSettings: (body: { monthly_budget_myr?: number }) =>
     apiFetch<WorkspaceSettings>("/settings/workspace", { method: "PATCH", body }),

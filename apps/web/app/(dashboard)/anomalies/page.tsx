@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, FlaskConical } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, YAxis } from "recharts";
+import { Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { DataSourceBadge } from "@/components/data-source-badge";
 import { OwnerButton } from "@/components/owner-button";
@@ -46,6 +46,7 @@ function Sparkline({ data, start, end }: { data: { day: string; cost: number }[]
     <div className="h-12 w-40" aria-label="Daily cost around the event">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 4, right: 2, bottom: 4, left: 2 }}>
+          <XAxis hide dataKey="day" />
           <YAxis hide domain={["dataMin", "dataMax"]} />
           <ReferenceArea x1={start} x2={end} fill="#fde68a" fillOpacity={0.6} ifOverflow="extendDomain" />
           <Tooltip
@@ -72,7 +73,7 @@ function AnomalyRow({ a, series }: { a: Anomaly; series: Map<string, { day: stri
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed"),
   });
   const end = a.end_day ?? a.day;
-  const window = (series.get(a.application) ?? []).filter((p) => p.day >= addDays(a.day, -14) && p.day <= addDays(end, 7));
+  const window = (series.get(`${a.application}:${a.is_synthetic ? "synthetic" : "real"}`) ?? []).filter((p) => p.day >= addDays(a.day, -14) && p.day <= addDays(end, 7));
   const gt = a.synthetic_ground_truth;
   return (
     <Card className="gap-0 py-0 shadow-[var(--shadow-soft)]">
@@ -151,9 +152,10 @@ export default function AnomaliesPage() {
   const series = useMemo(() => {
     const m = new Map<string, Map<string, number>>();
     for (const r of usage.data?.items ?? []) {
-      const app = m.get(r.application) ?? new Map<string, number>();
+      const key = `${r.application}:${r.data_origin}`;
+      const app = m.get(key) ?? new Map<string, number>();
       app.set(r.day, (app.get(r.day) ?? 0) + r.cost_myr);
-      m.set(r.application, app);
+      m.set(key, app);
     }
     const out = new Map<string, { day: string; cost: number }[]>();
     m.forEach((days, app) =>
@@ -214,7 +216,7 @@ export default function AnomaliesPage() {
           <Card className="py-5 shadow-[var(--shadow-soft)]">
             <CardContent className="space-y-3 text-[13px]">
               <SectionTitle aside={<DataSourceBadge origin="synthetic" />}>False alarms (held-out test)</SectionTitle>
-              {!test ? (
+              {ev.isError ? <ErrorState error={ev.error} onRetry={() => ev.refetch()} /> : ev.isLoading ? <LoadingBlock rows={1} /> : !test ? (
                 <p className="text-muted-foreground">No evaluation has been run yet.</p>
               ) : (
                 <dl className="tabular grid grid-cols-2 gap-2">
