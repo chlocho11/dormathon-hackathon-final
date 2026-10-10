@@ -1,6 +1,6 @@
 # Implementation Status
 
-_Last updated: 2026-10-10_
+_Last updated: 2026-10-11_
 
 | Phase | Status |
 |---|---|
@@ -8,8 +8,45 @@ _Last updated: 2026-10-10_
 | 1. Database & Gateway | Done (mock provider; real Anthropic call not yet verified, no key supplied) |
 | 2. Data & ML | Done (all metrics on synthetic data) |
 | 3. Decision & Cache | Done (mock provider) |
-| 4. Dashboard | Next (route skeleton only) |
-| 5. E2E, Deploy, Demo | Not started |
+| 4. Dashboard | Done (local mock-provider browser verification) |
+| 5. E2E, Deploy, Demo | Next (dashboard browser smoke checks are already included; full release/deployment/demo work remains) |
+
+## Phase 4: Dashboard (done)
+
+### Completed
+- API-backed Overview, Predictions, Anomalies, Decision Lab, Usage Explorer, Evaluation, Demo Chatbot and Settings; local owner/viewer login and hosted Supabase login support.
+- Forecast charts, intervals, cost drivers, budget risk, baseline comparisons, anomaly severity filters and acknowledgement, assumption sliders, quality gates, approval confirmation, emergency disable, savings measurement and audit history.
+- Scenarios explicitly submit the displayed forecast ID; old scenario/recommendation values are not carried into a newer forecast. Chart captions identify the interpolated interval and illustrative distribution of monthly savings.
+- Usage filters apply to both aggregates and paginated request metadata. The API filters and matching totals remain workspace-scoped; dates use Kuala Lumpur calendar boundaries. CSV fields are quoted and spreadsheet formulas escaped. Sorting explicitly covers loaded rows only.
+- Evaluation exposes measured backtests, anomaly confusion matrix, cache threshold sweep, simulator error and limitations, with a working `/model-card` page.
+- Gateway traffic and real provider calls are distinguished. Mock responses are labelled without claiming an Anthropic call; cache hits report no provider call. Synthetic anomaly sparklines do not merge gateway data into their series.
+- Loading, empty and retryable error states; chat reconnection and expired-token renewal; responsive drawer navigation and scrollable tables. Browser checks found and fixed mobile table overflow and missing accessible slider names. Metric badges wrap within their cards.
+- `apps/web/tests/dashboard.spec.ts`, `playwright.config.ts`, `npm run test:dashboard`, and usage-filter regression tests. Browser activation checks restore disabled policies, and the budget check restores its original value. They retain the immutable audit trail and mock request metadata.
+
+### Verified (2026-10-11)
+| Check | Result |
+|---|---|
+| Web `npm run lint`, `npm run typecheck`, `npm run build` | pass; no lint warnings; all routes including model card compile |
+| API `ruff check .`, `ruff format --check .`, `pytest` | pass; **150 passed** against real PostgreSQL + pgvector, mock Anthropic |
+| Browser `npm run test:dashboard` | **8 passed**, Chromium, production frontend on isolated port 3100 + local API |
+| Dashboard screens / Evaluation tabs / model card | rendered against seeded local API; no browser page errors in the screen traversal |
+| Viewer permissions | run forecast, change budget and generate recommendation disabled; scenarios remain viewable |
+| Owner decision loop | adjust/reset assumptions, generate, confirm approval, safe FAQ hit, personal/order bypass, disable, same FAQ resumes mock-provider calls |
+| Recovery | failed chat-session connection can retry; malformed/non-envelope scenario error displays a retryable error and recovers |
+| Usage / budget | mobile aggregate CSV download works; owner budget change persists after reload and original value is restored |
+| Responsive layout | all eight screens fit **360px** mobile and **1440px** desktop viewports; drawer navigation and Evaluation tabs work; desktop traversal has no page errors |
+| Request filters | filtered pagination totals, tenant isolation, missing app/model/category, origin filters and Kuala Lumpur midnight boundaries covered; reversed date ranges rejected |
+
+Screenshots (generated and git-ignored): `artifacts/phase4/overview-desktop.png`, `artifacts/phase4/decision-lab-desktop.png`, `artifacts/phase4/evaluation-mobile.png`.
+
+### Remaining limitations
+- Verification uses the existing seeded synthetic history and mock Anthropic adapter. No live Anthropic or hosted Supabase verification was performed.
+- Hosted Supabase sign-in is implemented but still needs real project/account configuration for live verification.
+- Gateway aggregates may include mock-provider traffic; the UI explains this and labels request/provider mode. It does not claim real customer evidence.
+- The cumulative intervention curve illustrates month-end savings; it is not a separately measured daily savings forecast. Tables scroll horizontally within cards on small screens.
+- Request sorting applies to fetched pages, with more rows available through Load more.
+- Browser checks are local Phase 4 evidence. Full CI browser orchestration, production security review, cloud deployment, deployment runbook and three-minute judge demo remain Phase 5.
+- See `docs/dashboard_verification.md` for repeatable commands and prerequisites.
 
 ## Phase 3: Decision & Cache (done)
 
@@ -128,12 +165,18 @@ Test coverage by file: `test_auth` (invalid/expired/wrong-aud/wrong-iss/wrong-se
 - The chat is single-turn: `conversation_id` is accepted, but conversation history is never stored, for privacy.
 - The Anthropic SDK (1.13) now ships on `httpx2`; the adapter test uses `httpx2.MockTransport`.
 - Supabase JWKS verification is implemented but untested against a live Supabase project (no account supplied). The test confirms that dev tokens are refused once JWKS is configured.
-- The safe FAQ cache is not active yet: every chat is a `miss`. This is Phase 3.
+- At the Phase 1 checkpoint, the cache was not active. Phase 3 subsequently completed the safe FAQ cache and approval workflow.
 
 ## Phase 0: Scaffold (done)
 Monorepo per §4; FastAPI app factory with error envelope, request IDs, security headers, and a CORS allowlist; Next.js 15 + Tailwind v4 shell with §14 design tokens, a responsive sidebar and all routes as honest "no data yet" placeholders; `.env.example`, `.gitignore`, `docker-compose.yml`, `Makefile`, `render.yaml`, and CI. Verified: web lint, typecheck and build pass; all 10 routes return 200 on a local boot.
 
 Environment notes: this machine has no Docker or `make`; `uv` was installed via pip (`python3 -m uv`). The API is pinned to Python 3.12 (uv-managed).
 
-## Next: Phase 4 (Dashboard)
-All P0 screens wired to the API (Overview, Predictions, Anomalies, Decision Lab with sliders and approval modal, Usage Explorer, Evaluation, Demo Chatbot, Settings), shadcn/ui components, Recharts, provenance badges, and loading/empty/error states.
+## Phase 5: E2E, Deploy, Demo (in progress)
+Integrate browser checks into CI, complete production/security and deployment validation, write the deployment/demo/rubric evidence documents, and rehearse the three-minute demo. Real Anthropic and hosted services need supplied credentials; retain a working mock-mode local fallback.
+
+Phase 5 preparation: CI browser job, deployment/architecture/security/demo/evidence documents, production issuer/TLS/secret guards, DB readiness status, retention with aggregate preservation, and safer smoke/replay commands are implemented. Runtime frontend dependency audit is clean; five development-tool findings remain. Cloud project access, publication, Docker execution, live-provider verification and hosted rehearsal are pending.
+
+
+### Phase 5 local demo checkpoint (2026-10-11)
+The user selected a synthetic demo without Supabase. The local demo path is ready: API suite, frontend lint/types/build, eight browser tests and no-chat smoke passed. Mock replay measured 10 provider calls before approval versus 3 after, with 7 exact hits and 3 safety bypasses; policies were restored to disabled. See docs/local_demo.md and docs/demo_script.md. CI browser integration is prepared but has not run on GitHub. Optional cloud publication, Docker build, live Supabase/Anthropic and hosted scheduling remain unverified. No Git changes have been pushed.

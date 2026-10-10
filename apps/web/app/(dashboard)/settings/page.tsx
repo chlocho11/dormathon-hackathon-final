@@ -59,7 +59,7 @@ function PolicyEditor({ p }: { p: Policy }) {
   const ttlNum = Number(ttl);
   return (
     <div className="space-y-3 rounded-md border p-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium">{appLabel(p.application)}</span>
         <Badge variant={p.enabled ? "default" : "outline"}>{p.enabled ? "Enabled" : "Off (enable via Decision Lab approval)"}</Badge>
       </div>
@@ -211,6 +211,7 @@ export default function SettingsPage() {
           <CardContent className="space-y-3">
             <SectionTitle aside={<Badge variant="secondary">FAQ version {d.knowledge_version}</Badge>}>Safe cache policy</SectionTitle>
             {policies.isLoading && <LoadingBlock rows={1} />}
+            {policies.isError && <ErrorState error={policies.error} onRetry={() => policies.refetch()} />}
             {policies.data?.items.map((p) => <PolicyEditor key={p.id} p={p} />)}
             <OwnerButton variant="outline" size="sm" onClick={() => setConfirm("faq")}>
               <RefreshCcw className="size-3.5" /> Invalidate cached answers (new FAQ version)

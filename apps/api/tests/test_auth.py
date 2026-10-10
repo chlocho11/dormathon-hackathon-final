@@ -112,7 +112,10 @@ def test_production_config_guards():
     base = dict(
         app_env="production",
         demo_mode=False,
-        supabase_jwks_url="https://x/jwks",
+        supabase_url="https://x.supabase.co",
+        supabase_jwks_url="https://x.supabase.co/auth/v1/.well-known/jwks.json",
+        database_url="postgresql+psycopg://example:example@db.example/test?sslmode=require",
+        scheduler_secret="c" * 32,
         chat_token_secret="a" * 32,
         fingerprint_secret="b" * 32,
         allowed_origins=["https://app.example"],
@@ -124,6 +127,12 @@ def test_production_config_guards():
         {"supabase_jwks_url": None},
         {"chat_token_secret": None},
         {"fingerprint_secret": None},
+        {"supabase_url": None},
+        {"supabase_jwks_url": "https://other.supabase.co/auth/v1/.well-known/jwks.json"},
+        {"allowed_origins": ["http://app.example"]},
+        {"chat_token_secret": "short"},
+        {"scheduler_secret": "change-me"},
+        {"database_url": "postgresql+psycopg://example:example@db.example/test"},
     ):
         with pytest.raises(RuntimeError):
             validate_settings(Settings(**{**base, **bad}))

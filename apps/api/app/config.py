@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import parse_qs, urlparse
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -50,6 +51,9 @@ class Settings(BaseSettings):
     cache_overhead_per_lookup_myr: float = 0.00005  # assumption: local embedding + DB lookup
     cache_fixed_daily_myr: float = 0.20  # assumption: share of hosting/DB attributable to the cache
 
+    request_retention_days: int = Field(default=30, ge=1, le=365)
+    aggregate_retention_days: int = Field(default=180, ge=60, le=3650)
+
     chat_max_chars: int = 1000
     chat_max_output_tokens: int = 250
     provider_timeout_s: float = 25.0
@@ -96,8 +100,20 @@ def validate_settings(settings: Settings) -> Settings:
             raise RuntimeError("DEMO_MODE must be false in production.")
         if not settings.supabase_jwks_url:
             raise RuntimeError("SUPABASE_JWKS_URL is required in production (dev tokens are disabled).")
-        if not settings.chat_token_secret or not settings.fingerprint_secret:
-            raise RuntimeError("CHAT_TOKEN_SECRET and FINGERPRINT_SECRET are required in production.")
+        if not settings.supabase_url or not settings.supabase_url.startswith("https://"):
+            raise RuntimeError("SUPABASE_URL must be an HTTPS project URL in production (JWT issuer verification).")
+        expected_jwks = f"{settings.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+        if settings.supabase_jwks_url != expected_jwks:
+            raise RuntimeError("SUPABASE_JWKS_URL must belong to the configured Supabase project.")
+        if not settings.allowed_origins or any(not o.startswith("https://") for o in settings.allowed_origins):
+            raise RuntimeError("ALLOWED_ORIGINS must contain explicit HTTPS frontend origins in production.")
+        for name in ("chat_token_secret", "fingerprint_secret", "scheduler_secret"):
+            value = getattr(settings, name)
+            if not value or len(value) < 32 or value.lower().startswith("change-me"):
+                raise RuntimeError(f"{name.upper()} must be a random string of at least 32 characters in production.")
+        sslmode = parse_qs(urlparse(settings.database_url).query).get("sslmode", [None])[0]
+        if sslmode not in {"require", "verify-ca", "verify-full"}:
+            raise RuntimeError("DATABASE_URL must require TLS with sslmode=require (or stronger) in production.")
     return settings
 
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { DataSourceBadge } from "@/components/data-source-badge";
@@ -305,7 +306,7 @@ export default function EvaluationPage() {
             </CardContent>
           </Card>
           <Tabs defaultValue="forecast">
-            <TabsList>
+            <TabsList className="h-auto flex-wrap">
               <TabsTrigger value="forecast">Forecasting</TabsTrigger>
               <TabsTrigger value="anomaly">Anomalies</TabsTrigger>
               <TabsTrigger value="cache">Safe cache & simulator</TabsTrigger>
@@ -324,7 +325,7 @@ export default function EvaluationPage() {
                 <li>Tree models cannot extrapolate sustained growth; the upper bound is the conservative budget signal.</li>
                 <li>Intervals are empirical and under-cover during distribution shift (campaigns, outages, prompt changes).</li>
                 <li>Cache results come from a 51-query hand-labelled set; zero false hits there is not a general guarantee.</li>
-                <li>Full model card: <code>docs/model_card.md</code>; generated report: <code>docs/evaluation_report.md</code>.</li>
+                <li><Link href="/model-card" className="text-primary underline">Read the full model card</Link>. Generated report: <code>docs/evaluation_report.md</code>.</li>
               </ul>
             </CardContent>
           </Card>

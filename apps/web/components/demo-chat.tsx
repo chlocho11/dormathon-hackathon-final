@@ -32,9 +32,10 @@ const PILL: Record<ChatResponse["cache_status"], { label: string; cls: string }>
 
 function Meta({ m }: { m: ChatResponse }) {
   const pill = PILL[m.cache_status];
+  const label = m.provider_mode === "mock" ? pill.label.replace(/Anthropic call/g, "Mock response") : pill.label;
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground" data-testid="chat-meta">
-      <span className={cn("rounded-full border px-2 py-0.5 font-semibold", pill.cls)}>{pill.label}</span>
+      <span className={cn("rounded-full border px-2 py-0.5 font-semibold", pill.cls)}>{label}</span>
       {m.provider_mode === "mock" && <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-warning">mock provider</span>}
       <span className="tabular">{m.usage.input_tokens + m.usage.output_tokens} tokens · {formatMYR(m.estimated_cost_myr, true)}</span>
       {m.cache_decision && <span title="Safe-cache gate decision">{titleCase(m.cache_decision.replace(/^shadow_/, "shadow: "))}</span>}
@@ -101,7 +102,12 @@ export function DemoChat() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4 p-4">
-        {sessionError && <p className="rounded-md bg-danger/10 p-2 text-sm text-danger">{sessionError}</p>}
+        {sessionError && (
+          <div role="alert" className="space-y-2 rounded-md bg-danger/10 p-3 text-sm text-danger">
+            <p>{sessionError}</p>
+            <Button variant="outline" size="sm" onClick={() => newSession()}>Retry chat connection</Button>
+          </div>
+        )}
         <div className="min-h-64 space-y-4" aria-live="polite">
           {messages.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">Ask about opening hours, delivery or cakes, or try a question that must not be cached.</p>
@@ -109,14 +115,14 @@ export function DemoChat() {
           {messages.map((m, i) =>
             m.role === "user" ? (
               <div key={i} className="flex justify-end">
-                <p className="max-w-[80%] rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-[14px] text-primary-foreground">{m.text}</p>
+                <p className="max-w-[80%] rounded-2xl rounded-br-sm break-words bg-primary px-3.5 py-2 text-[14px] text-primary-foreground">{m.text}</p>
               </div>
             ) : (
               <div key={i} className="max-w-[85%]">
                 {m.error ? (
                   <p className="rounded-2xl rounded-bl-sm bg-danger/10 px-3.5 py-2 text-[14px] text-danger">{m.error}</p>
                 ) : (
-                  <p className="rounded-2xl rounded-bl-sm bg-muted px-3.5 py-2 text-[14px] leading-relaxed">{m.text}</p>
+                  <p className="rounded-2xl rounded-bl-sm break-words bg-muted px-3.5 py-2 text-[14px] leading-relaxed">{m.text}</p>
                 )}
                 {m.meta && <Meta m={m.meta} />}
               </div>

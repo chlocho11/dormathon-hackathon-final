@@ -67,9 +67,9 @@ export default function DecisionLabPage() {
 
   const compare = useQuery({
     queryKey: ["compare", forecast?.id, debounced],
-    queryFn: () => api.compare(debounced),
+    queryFn: () => api.compare(debounced, forecast!.id),
     enabled: Boolean(forecast),
-    placeholderData: keepPreviousData,
+    placeholderData: (previous, query) => query?.queryKey[1] === forecast?.id ? keepPreviousData(previous) : undefined,
   });
   const baseline = compare.data?.scenarios.find((s) => s.scenario_type === "none");
   const cache = compare.data?.scenarios.find((s) => s.scenario_type === "semantic_cache");
@@ -123,7 +123,7 @@ export default function DecisionLabPage() {
       <div className="space-y-6">
         {compare.isError && <ErrorState error={compare.error} onRetry={() => compare.refetch()} />}
         {!baseline || !cache ? (
-          <LoadingBlock rows={2} />
+          compare.isError ? null : <LoadingBlock rows={2} />
         ) : (
           <>
             <div className={compare.isFetching ? "opacity-70 transition-opacity" : "transition-opacity"}>
@@ -179,6 +179,8 @@ export default function DecisionLabPage() {
                 <CardContent><QualityChecklist cache={cache} /></CardContent>
               </Card>
               <div className="space-y-3">
+                {recs.isLoading && <LoadingBlock rows={1} />}
+                {recs.isError && <ErrorState error={recs.error} onRetry={() => recs.refetch()} />}
                 <RecommendationCard rec={latest ?? null} showLink={false} />
                 {latest && latest.status === "proposed" && latest.action_type === "enable_semantic_cache" && (
                   <div className="flex flex-wrap gap-2">
@@ -226,6 +228,8 @@ export default function DecisionLabPage() {
           <Card className="py-5 shadow-[var(--shadow-soft)]">
             <CardContent>
               <SectionTitle aside={<span className="text-xs text-muted-foreground">since approval</span>}>Measurement</SectionTitle>
+              {measurement.isLoading && <LoadingBlock rows={1} />}
+              {measurement.isError && <ErrorState error={measurement.error} onRetry={() => measurement.refetch()} />}
               {measurement.data?.applications.every((a) => a.status === "never_enabled") && (
                 <p className="text-sm text-muted-foreground">Nothing to measure yet: no policy has been enabled.</p>
               )}
@@ -255,6 +259,8 @@ export default function DecisionLabPage() {
         <Card className="py-5 shadow-[var(--shadow-soft)]">
           <CardContent>
             <SectionTitle aside={<span className="text-xs text-muted-foreground">append-only</span>}>Audit history</SectionTitle>
+            {audit.isLoading && <LoadingBlock rows={2} />}
+            {audit.isError && <ErrorState error={audit.error} onRetry={() => audit.refetch()} />}
             {audit.data && audit.data.items.length === 0 ? (
               <p className="text-sm text-muted-foreground">No changes recorded yet.</p>
             ) : (

@@ -14,6 +14,7 @@ from app.models import Workspace
 from app.services.anomaly import detect_and_store
 from app.services.forecast import run_forecast
 from app.services.history import aggregate_real_usage
+from app.services.retention import purge_expired
 
 
 def run_for_workspace(session: Session, ws: Workspace, today: date | None = None) -> dict:
@@ -21,7 +22,9 @@ def run_for_workspace(session: Session, ws: Workspace, today: date | None = None
     real_rows = aggregate_real_usage(session, ws, through=today - timedelta(days=1))
     run = run_forecast(session, ws, today=today)
     anomalies = detect_and_store(session, ws, today=today)
+    retained = purge_expired(session, ws)
     return {
+        "retention": retained,
         "workspace": ws.slug,
         "real_daily_rows": real_rows,
         "forecast_run_id": str(run.id),

@@ -28,6 +28,17 @@ export function formatMetric(v: number | null | undefined, digits = 3): string {
   return v.toFixed(digits);
 }
 
+/** Dashboard calendar date in Kuala Lumpur, independent of the browser timezone. */
+export function calendarDaysAgo(n: number, now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: DISPLAY_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(now);
+  const part = (kind: string) => parts.find((p) => p.type === kind)!.value;
+  const day = new Date(`${part("year")}-${part("month")}-${part("day")}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() - n);
+  return day.toISOString().slice(0, 10);
+}
+
 /** "2026-10-09" (a calendar date) -> "9 Oct 2026" without timezone shifting. */
 export function formatDay(day: string | null | undefined, withYear = true): string {
   if (!day) return "—";

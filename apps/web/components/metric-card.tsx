@@ -21,7 +21,7 @@ export function MetricCard({
   return (
     <Card className="gap-0 py-0 shadow-[var(--shadow-soft)]">
       <CardContent className="space-y-1.5 p-5">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="eyebrow flex items-center gap-1">
             {label}
             {help && (

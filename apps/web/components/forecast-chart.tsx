@@ -113,7 +113,8 @@ export function CumulativeChart({
       </ResponsiveContainer>
       <figcaption className="mt-1 text-xs text-muted-foreground">
         MYR, cumulative for the calendar month. Shaded: {Math.round((forecast.metrics.interval_quantiles?.level ?? 0.9) * 100)}%
-        empirical interval from recent backtest residuals; it may under-cover when usage shifts.
+        empirical month-end interval interpolated across forecast days; it may under-cover when usage shifts.
+        {scenarioNetSavings !== undefined && " The caching curve distributes month-end net savings in proportion to forecast spend; it is an illustration of the monthly estimate."}
       </figcaption>
     </figure>
   );

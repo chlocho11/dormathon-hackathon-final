@@ -55,7 +55,6 @@ def aggregate_real_usage(session: Session, ws: Workspace, through: date) -> int:
             ApiRequest.cache_status != "error", ApiRequest.data_origin == "real",
         )
     ).all()  # fmt: skip
-    session.execute(delete(DailyUsage).where(DailyUsage.workspace_id == ws.id, DailyUsage.data_origin == "real"))
     if not reqs:
         session.commit()
         return 0
@@ -68,6 +67,15 @@ def aggregate_real_usage(session: Session, ws: Workspace, through: date) -> int:
     df["occurred_at"] = pd.to_datetime(df.occurred_at, utc=True)
     df["day"] = df.occurred_at.dt.tz_convert(tz).dt.date
     daily = daily_from_requests(df, data_origin="real")
+    first_day = df.day.min()
+    session.execute(
+        delete(DailyUsage).where(
+            DailyUsage.workspace_id == ws.id,
+            DailyUsage.data_origin == "real",
+            DailyUsage.day >= first_day,
+            DailyUsage.day <= through,
+        )
+    )
     for r in daily.itertuples():
         session.add(
             DailyUsage(

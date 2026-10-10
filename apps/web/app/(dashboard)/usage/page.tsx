@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { appLabel, categoryLabel, formatDateTime, formatDay, formatMYR, formatNum } from "@/lib/format";
+import { appLabel, calendarDaysAgo, categoryLabel, formatDateTime, formatDay, formatMYR, formatNum } from "@/lib/format";
 import { useUsageDaily } from "@/lib/queries";
 import type { RequestRow, UsageDailyRow } from "@/lib/types";
 
@@ -26,12 +26,6 @@ const METRICS: Record<Metric, { label: string; unit: string }> = {
   tokens: { label: "Tokens (in + out)", unit: "tokens" },
   cache_hits: { label: "Cache hits", unit: "hits" },
 };
-
-function isoDaysAgo(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
 
 function FilterSelect({ id, label, value, onChange, options }: {
   id: string; label: string; value: string; onChange: (v: string) => void; options: [string, string][];
@@ -49,15 +43,21 @@ function FilterSelect({ id, label, value, onChange, options }: {
   );
 }
 
+function csvCell(value: unknown) {
+  const text = String(value ?? "");
+  const safe = /^[=+@\-\t\r]/.test(text) ? `'${text}` : text;
+  return `"${safe.replace(/"/g, '\"\"')}"`;
+}
+
 function toCsv(rows: UsageDailyRow[]) {
   const cols: (keyof UsageDailyRow)[] = ["day", "application", "request_category", "model", "data_origin", "requests",
     "input_tokens", "output_tokens", "cost_myr", "cache_hits", "retry_requests"];
-  return [cols.join(","), ...rows.map((r) => cols.map((c) => String(r[c])).join(","))].join("\n");
+  return [cols.join(","), ...rows.map((r) => cols.map((c) => csvCell(r[c])).join(","))].join("\n");
 }
 
 export default function UsagePage() {
-  const [from, setFrom] = useState(isoDaysAgo(60));
-  const [to, setTo] = useState(isoDaysAgo(0));
+  const [from, setFrom] = useState(() => calendarDaysAgo(60));
+  const [to, setTo] = useState(() => calendarDaysAgo(0));
   const [origin, setOrigin] = useState("all");
   const [app, setApp] = useState("all");
   const [category, setCategory] = useState("all");
@@ -89,9 +89,16 @@ export default function UsagePage() {
     hits: t.hits + r.cache_hits,
   }), { cost: 0, requests: 0, tokens: 0, hits: 0 }), [rows]);
 
+  const requestFilters = {
+    from, to,
+    application: app === "all" ? undefined : app,
+    model: model === "all" ? undefined : model,
+    request_category: category === "all" ? undefined : category,
+    data_origin: origin === "all" ? undefined : origin,
+  };
   const requests = useInfiniteQuery({
-    queryKey: ["usageRequests"],
-    queryFn: ({ pageParam }) => api.usageRequests(pageParam),
+    queryKey: ["usageRequests", requestFilters],
+    queryFn: ({ pageParam }) => api.usageRequests(pageParam, requestFilters),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor,
   });
@@ -140,7 +147,7 @@ export default function UsagePage() {
             <Input id="to" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} />
           </div>
           <FilterSelect id="origin" label="Origin" value={origin} onChange={setOrigin}
-            options={[["all", "All origins"], ["synthetic", "Synthetic"], ["real", "Live traffic"]]} />
+            options={[["all", "All origins"], ["synthetic", "Synthetic"], ["real", "Gateway traffic"]]} />
           <FilterSelect id="app" label="Application" value={app} onChange={setApp}
             options={[["all", "All apps"], ["bakery_demo", appLabel("bakery_demo")], ["tuition_demo", appLabel("tuition_demo")], ["retail_demo", appLabel("retail_demo")]]} />
           <FilterSelect id="category" label="Category" value={category} onChange={setCategory}
@@ -175,7 +182,7 @@ export default function UsagePage() {
                     labelFormatter={(d) => formatDay(String(d))} contentStyle={{ fontSize: 12 }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="synthetic" name="Synthetic" stackId="o" fill="#d6c7a8" isAnimationActive={false} />
-                  <Bar dataKey="real" name="Live traffic" stackId="o" fill="var(--chart-forecast)" isAnimationActive={false} />
+                  <Bar dataKey="real" name="Gateway traffic" stackId="o" fill="var(--chart-forecast)" isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -185,14 +192,16 @@ export default function UsagePage() {
 
       <Card className="py-5 shadow-[var(--shadow-soft)]">
         <CardContent>
+          <p className="mb-3 text-xs text-muted-foreground">Filters apply to both charts and requests. Sorting applies to loaded requests; load more to include older rows. Gateway traffic may use the mock provider.</p>
           <SectionTitle aside={<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            {requests.data?.pages[0]?.total ?? 0} total <DataSourceBadge origin="real" />
+            {reqRows.length} loaded of {requests.data?.pages[0]?.total ?? 0} matching <DataSourceBadge origin="real" />
           </span>}>
             Gateway requests (metadata only)
           </SectionTitle>
-          {requests.isError && <ErrorState error={requests.error} />}
+          {requests.isLoading && <LoadingBlock rows={3} />}
+          {requests.isError && <ErrorState error={requests.error} onRetry={() => requests.refetch()} />}
           {requests.data && reqRows.length === 0 && (
-            <EmptyState title="No live requests yet">Use the Demo Chatbot to send traffic through the gateway.</EmptyState>
+            <EmptyState title="No gateway requests for these filters">Adjust the filters or use the Demo Chatbot to send traffic.</EmptyState>
           )}
           {reqRows.length > 0 && (
             <div className="overflow-x-auto">
@@ -204,7 +213,7 @@ export default function UsagePage() {
                     <SortHead k="request_category" label="Category" />
                     <SortHead k="cache_status" label="Cache" />
                     <SortHead k="model" label="Model / provider" />
-                    <SortHead k="input_tokens" label="Tokens" right />
+                    <SortHead k="input_tokens" label="Input tokens" right />
                     <SortHead k="estimated_cost_myr" label="Cost" right />
                     <SortHead k="latency_ms" label="Latency" right />
                   </TableRow>
@@ -224,7 +233,7 @@ export default function UsagePage() {
                         {r.provider === "tokenguard-cache" ? "approved FAQ" : r.model.replace("claude-", "")}
                         {r.provider_mode === "mock" && r.provider !== "tokenguard-cache" && <span className="ml-1 text-warning">(mock)</span>}
                       </TableCell>
-                      <TableCell className="tabular text-right text-[13px]">{formatNum(r.input_tokens + r.output_tokens)}</TableCell>
+                      <TableCell className="tabular text-right text-[13px]">{formatNum(r.input_tokens)} in / {formatNum(r.output_tokens)} out</TableCell>
                       <TableCell className="tabular text-right text-[13px]">{formatMYR(r.estimated_cost_myr, true)}</TableCell>
                       <TableCell className="tabular text-right text-[13px]">{r.latency_ms} ms</TableCell>
                     </TableRow>

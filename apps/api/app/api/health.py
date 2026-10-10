@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from app.config import get_settings
 from app.db import ping_database
@@ -8,10 +8,12 @@ router = APIRouter(tags=["health"])
 
 
 @router.get("/health")
-def health() -> dict:
+def health(response: Response) -> dict:
     """Readiness and dependency summary. Never includes secrets."""
     settings = get_settings()
     db = ping_database()
+    if db != "ok":
+        response.status_code = 503
     return {
         "status": "ok" if db == "ok" else "degraded",
         "environment": settings.app_env,

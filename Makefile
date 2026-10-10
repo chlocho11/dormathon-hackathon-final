@@ -52,4 +52,4 @@ test: lint
 	cd $(WEB) && npm run build
 
 demo:
-	@echo "Implemented in Phase 5" && exit 1
+	cd $(API) && $(UV) run python ../../scripts/demo_replay.py --approve --disable-after

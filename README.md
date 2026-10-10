@@ -13,6 +13,10 @@ Full specification: [MASTER_BUILD_PACK.md](MASTER_BUILD_PACK.md). Progress and v
 | `scripts/` | Synthetic data generation, seeding, evaluation, smoke tests |
 | `data/generated/`, `artifacts/` | Generated, git-ignored outputs |
 
+## Synthetic demo (no cloud accounts)
+
+Supabase is optional. The local demo uses synthetic history, local owner/viewer login and a mock chatbot with no API charges. Follow [the PowerShell demo guide](docs/local_demo.md) and [three-minute presentation](docs/demo_script.md). Cloud deployment is an optional path in [deployment.md](docs/deployment.md).
+
 ## Local setup
 
 Prerequisites: Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node 22, and either Docker or nothing else (see the Docker-free option).
@@ -72,3 +76,7 @@ cd apps/web && npm run lint && npm run typecheck && npm run build
 ```
 
 API tests run against real PostgreSQL + pgvector: `TEST_DATABASE_URL` if set (as in CI), otherwise an embedded server started automatically. Tests never call the real Anthropic API.
+
+### Dashboard browser verification (Phase 4)
+
+All eight dashboard screens are wired to the API. See [dashboard verification](docs/dashboard_verification.md) for the mock API setup, CORS configuration and repeatable browser checks. After building the frontend and installing Chromium, run `npm run test:dashboard` from `apps/web`. Tests start an isolated production frontend on port 3100 and require seeded history, evaluation and a forecast. Screenshots live in `artifacts/phase4/`.

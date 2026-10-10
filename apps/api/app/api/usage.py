@@ -1,6 +1,7 @@
 import base64
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Query
 from sqlalchemy import and_, func, or_, select
@@ -24,6 +25,8 @@ def usage_daily(
 ) -> dict:
     """Daily aggregates with explicit origin labels (synthetic and real are never merged here)."""
     m = require_member(session, principal, workspace_id)
+    if from_ and to and from_ > to:
+        raise ApiError(422, "validation_error", "From date must be on or before To date.")
     id_to_name, _ = app_maps(session, m.workspace_id)
     stmt = select(
         DailyUsage.day, DailyUsage.application_id, DailyUsage.request_category, DailyUsage.model,
@@ -70,20 +73,44 @@ def usage_requests(
     session: DbSession,
     workspace_id: uuid.UUID | None = None,
     cursor: str | None = None,
+    from_: date | None = Query(default=None, alias="from"),
+    to: date | None = None,
+    application: str | None = None,
+    model: str | None = None,
+    request_category: str | None = None,
+    data_origin: str | None = Query(default=None, pattern="^(real|synthetic)$"),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> dict:
     """Safe request metadata only: no message text is stored or returned."""
     m = require_member(session, principal, workspace_id)
     id_to_name, _ = app_maps(session, m.workspace_id)
-    stmt = select(ApiRequest).where(ApiRequest.workspace_id == m.workspace_id)
+    if from_ and to and from_ > to:
+        raise ApiError(422, "validation_error", "From date must be on or before To date.")
+    filters = [ApiRequest.workspace_id == m.workspace_id]
+    if application:
+        app_ids = [aid for aid, name in id_to_name.items() if name == application]
+        filters.append(ApiRequest.application_id.in_(app_ids))
+    for column, value in (
+        (ApiRequest.model, model),
+        (ApiRequest.request_category, request_category),
+        (ApiRequest.data_origin, data_origin),
+    ):
+        if value:
+            filters.append(column == value)
+    tz = ZoneInfo("Asia/Kuala_Lumpur")
+    if from_:
+        filters.append(ApiRequest.occurred_at >= datetime.combine(from_, datetime.min.time(), tz).astimezone(UTC))
+    if to:
+        filters.append(
+            ApiRequest.occurred_at < datetime.combine(to + timedelta(days=1), datetime.min.time(), tz).astimezone(UTC)
+        )
+    stmt = select(ApiRequest).where(*filters)
     if cursor:
         ts, rid = _decode(cursor)
         stmt = stmt.where(or_(ApiRequest.occurred_at < ts, and_(ApiRequest.occurred_at == ts, ApiRequest.id < rid)))
     rows = list(session.scalars(stmt.order_by(ApiRequest.occurred_at.desc(), ApiRequest.id.desc()).limit(limit + 1)))
     page, more = rows[:limit], len(rows) > limit
-    total = session.scalar(
-        select(func.count()).select_from(ApiRequest).where(ApiRequest.workspace_id == m.workspace_id)
-    )
+    total = session.scalar(select(func.count()).select_from(ApiRequest).where(*filters))
     return {
         "items": [
             {

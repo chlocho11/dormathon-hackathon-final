@@ -88,7 +88,7 @@ def decode_user_token(token: str) -> Principal:
                 algorithms=["RS256", "ES256"],
                 audience=settings.supabase_jwt_audience,
                 issuer=issuer,
-                options={"require": ["exp", "sub", "aud"], "verify_iss": issuer is not None},
+                options={"require": ["exp", "sub", "aud", "iss"], "verify_iss": issuer is not None},
             )
         elif settings.dev_auth_enabled:
             claims = jwt.decode(
