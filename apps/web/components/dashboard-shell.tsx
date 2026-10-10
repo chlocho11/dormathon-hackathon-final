@@ -1,42 +1,65 @@
 "use client";
 
-import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { ApiError } from "@/lib/api";
+import { getAccessToken } from "@/lib/auth";
+import { useMe } from "@/lib/queries";
 import { AppSidebar } from "./app-sidebar";
+import { ErrorState, LoadingBlock } from "./states";
+import { Topbar } from "./topbar";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [hasToken, setHasToken] = useState<boolean | null>(null);
+  const me = useMe();
+
+  useEffect(() => {
+    getAccessToken().then((t) => {
+      setHasToken(Boolean(t));
+      if (!t) router.replace("/login");
+    });
+  }, [router]);
+
+  useEffect(() => {
+    if (me.error instanceof ApiError && me.error.status === 401) router.replace("/login");
+  }, [me.error, router]);
+
+  if (hasToken === null || (hasToken && me.isLoading)) {
+    return (
+      <div className="mx-auto max-w-6xl p-8">
+        <LoadingBlock rows={4} />
+      </div>
+    );
+  }
+  if (!hasToken) return null;
+
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-60 shrink-0 border-r border-line bg-card md:block">
-        <div className="sticky top-0 h-screen">
+      <aside className="hidden w-60 shrink-0 border-r bg-[#f6f5f4] md:block">
+        <div className="sticky top-0 h-screen overflow-y-auto">
           <AppSidebar />
         </div>
       </aside>
-      {open && (
-        <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
-          <button
-            className="absolute inset-0 bg-black/30"
-            aria-label="Close navigation"
-            onClick={() => setOpen(false)}
-          />
-          <aside className="relative h-full w-64 bg-card shadow-lg">
-            <AppSidebar onNavigate={() => setOpen(false)} />
-          </aside>
-        </div>
-      )}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="left" className="w-64 bg-[#f6f5f4] p-0">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <AppSidebar onNavigate={() => setOpen(false)} />
+        </SheetContent>
+      </Sheet>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center gap-3 border-b border-line bg-card px-4 md:px-8">
-          <button
-            className="rounded-md p-1.5 hover:bg-black/[0.04] md:hidden"
-            onClick={() => setOpen((v) => !v)}
-            aria-label={open ? "Close navigation" : "Open navigation"}
-          >
-            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
-          <p className="text-sm text-muted">Workspace budget: not configured yet</p>
-        </header>
-        <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-8">{children}</main>
+        <Topbar onMenu={() => setOpen(true)} />
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-8 md:py-8">
+          {me.isError && !(me.error instanceof ApiError && me.error.status === 401) ? (
+            <ErrorState error={me.error} onRetry={() => me.refetch()} />
+          ) : me.data && me.data.memberships.length === 0 ? (
+            <ErrorState error={new ApiError(403, "no_workspace", "Your account is not a member of any workspace.")} />
+          ) : (
+            children
+          )}
+        </main>
       </div>
     </div>
   );
