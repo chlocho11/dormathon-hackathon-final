@@ -31,8 +31,9 @@ def main() -> None:
     manifest = json.loads((args.data / "dataset_manifest.json").read_text())
     daily = pd.read_csv(args.data / "daily_usage_synthetic.csv")
     truth = pd.read_csv(args.data / "anomaly_truth.csv")
+    scenario_truth = pd.read_csv(args.data / "scenario_truth.csv")
     t0 = time.time()
-    result = json_safe(evaluate_all(daily, truth, manifest))
+    result = json_safe(evaluate_all(daily, truth, manifest, scenario_truth))
     result["runtime_seconds"] = round(time.time() - t0, 1)
     result["anomaly_truth"] = json_safe(truth.to_dict(orient="records"))
 

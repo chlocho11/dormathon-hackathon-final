@@ -50,6 +50,14 @@ uv run python -m app.jobs.predict     # daily job: aggregate real traffic, forec
 
 `make seed` and `make train` wrap these. All synthetic rows are labelled `data_origin=synthetic`; see [docs/data_dictionary.md](docs/data_dictionary.md) and [docs/model_card.md](docs/model_card.md).
 
+### Decision loop demo (cache recommendation -> approval -> replay)
+
+```bash
+python scripts/demo_replay.py --approve --disable-after
+# same 10 prompts before/after owner approval: provider calls drop for safe FAQ intents only;
+# order-status / personal / numeric prompts still go to the provider. Mock mode spends nothing.
+```
+
 With `make`: `make dev`, `make test`, `make lint`, `make smoke`. On Windows without `make`, run the commands above directly (if `uv` is not on PATH, use `python -m uv`).
 
 ### Local auth

@@ -7,6 +7,7 @@ network call; its token counts are rough estimates and its provider is recorded 
 
 import hashlib
 import time
+import uuid
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Protocol
@@ -71,7 +72,8 @@ class MockProvider:
             usage=usage,
             model=self.model,
             provider=self.name,
-            provider_request_id=f"mock_{self.calls}_{digest}",
+            # Globally unique (the ledger enforces uniqueness across restarts); digest aids debugging only.
+            provider_request_id=f"mock_{uuid.uuid4().hex}_{digest}",
             latency_ms=int((time.perf_counter() - start) * 1000),
         )
 

@@ -32,7 +32,9 @@ Synthetic and real rows are never presented as equivalent evidence. Forecast run
 | A8 | missing output tokens, duplicate rows, delayed / out-of-order records, extreme legitimate requests | no (robustness) |
 
 ## Database tables (see `apps/api/app/models.py`)
-- `api_requests`: request metadata only. There is no message text; `request_fingerprint` and `client_fingerprint` are keyed HMACs.
+- `api_requests`: request metadata only. There is no message text; `request_fingerprint` and `client_fingerprint` are keyed HMACs. `cache_status` (miss / exact_hit / semantic_hit / bypass / error) says what happened. `cache_decision` records the safety gate and match outcome for every request, prefixed `shadow_` while the policy is disabled and `holdout_` for the opt-in control group.
+- `response_cache`: one row per normalized query that was served an approved FAQ answer (TTL, knowledge version, hit count). It never stores model-generated text.
+- `scenario_runs` / `recommendations` / `policies` / `policy_audit`: what-if results computed from a persisted forecast, proposed decisions (with optimistic `version`), per-app cache policy, and the append-only audit trail.
 - `daily_usage`: per workspace × app × day × category × model × origin. Real rows are rebuilt by `aggregate_real_usage` for complete days only.
 - `forecast_runs` / `forecast_points`: each run plus per-day, per-segment predictions with bounds.
 - `anomaly_events`: merged alert events with reason code, observed vs expected values, impact and explanation.

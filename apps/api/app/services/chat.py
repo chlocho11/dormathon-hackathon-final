@@ -1,9 +1,15 @@
-"""BakeryBot gateway: categorize, call the provider once on a miss, record usage + estimated cost.
+"""Chat gateway: safe FAQ cache decision, then (only if not served from cache) exactly one provider call.
 
-Phase 1: every request goes to the provider (cache_status='miss'). The safe FAQ cache is
-inserted before the provider call in Phase 3; a cache hit must never call the provider.
+cache_status semantics:
+  exact_hit / semantic_hit  approved FAQ answer served, NO provider call, zero provider tokens
+  bypass                    cache enabled but the safety gate rejected the request -> provider
+  miss                      provider called (cache disabled, no confident match, or holdout)
+  error                     provider failed (logged with zero cost, never cached)
+cache_decision records the gate/match outcome for every request, prefixed 'shadow_' while the
+policy is disabled, so eligibility can be measured before anyone approves caching.
 """
 
+import time
 import uuid
 from dataclasses import dataclass
 from decimal import Decimal
@@ -14,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.errors import ApiError
 from app.models import Application, FaqEntry, Workspace
+from app.services import cache as faq_cache
 from app.services import usage_logger
 from app.services.anthropic_adapter import ChatProvider, ProviderError
 from app.services.categorize import categorize
@@ -43,6 +50,9 @@ class ChatResult:
     estimated_cost_myr: Decimal
     provider: str
     request_category: str
+    cache_decision: str | None = None
+    faq_intent_key: str | None = None
+    similarity: float | None = None
 
 
 def active_faqs(session: Session, app: Application, ws: Workspace, locale: str = "en") -> list[FaqEntry]:
@@ -96,6 +106,44 @@ def handle_chat(
         client_fingerprint=usage_logger.client_fingerprint(ws.id, client_key),
         pricing_version=rates.version,
     )
+
+    start = time.perf_counter()
+    policy = faq_cache.cache_policy(session, app)
+    decision = faq_cache.decide(session, app, ws, policy, message, locale, fp)
+    enabled = bool(policy and policy.enabled)
+    if enabled and decision.eligible and not decision.holdout:
+        status = "exact_hit" if decision.decision == "eligible_exact" else "semantic_hit"
+        faq_cache.record_hit(session, app, ws, policy, decision, message)
+        usage_logger.record(
+            session,
+            usage_logger.LedgerEntry(
+                **{**base, "model": "faq-cache", "request_category": "static_faq"},
+                provider="tokenguard-cache",
+                cache_status=status,
+                usage=TokenUsage(),
+                estimated_cost_myr=Decimal(0),  # no provider call; local overhead is accounted separately
+                latency_ms=int((time.perf_counter() - start) * 1000),
+                cache_decision=decision.decision,
+                faq_intent_key=decision.intent_key,
+                similarity_score=decision.similarity,
+            ),
+            request_id,
+        )
+        session.commit()
+        return ChatResult(
+            request_id, decision.faq.approved_answer, status, TokenUsage(), Decimal(0), "tokenguard-cache",
+            "static_faq", decision.decision, decision.intent_key, decision.similarity,
+        )  # fmt: skip
+
+    if not enabled:
+        cache_status, label = "miss", f"shadow_{decision.decision}"
+    elif decision.eligible:  # holdout: deliberately not served from cache (counterfactual group)
+        cache_status, label = "miss", f"holdout_{decision.decision}"
+    elif decision.decision.startswith("bypass_"):
+        cache_status, label = "bypass", decision.decision
+    else:
+        cache_status, label = "miss", decision.decision
+    base.update(cache_decision=label, faq_intent_key=decision.intent_key, similarity_score=decision.similarity)
     try:
         resp = provider.complete(
             build_system_prompt(faqs, ws.knowledge_version), message, settings.chat_max_output_tokens
@@ -126,7 +174,7 @@ def handle_chat(
         usage_logger.LedgerEntry(
             **{**base, "model": resp.model},
             provider=resp.provider,
-            cache_status="miss",
+            cache_status=cache_status,
             usage=resp.usage,
             estimated_cost_myr=cost,
             latency_ms=resp.latency_ms,
@@ -135,4 +183,7 @@ def handle_chat(
         request_id,
     )
     session.commit()
-    return ChatResult(request_id, resp.text, "miss", resp.usage, cost, resp.provider, category)
+    return ChatResult(
+        request_id, resp.text, cache_status, resp.usage, cost, resp.provider, category, label,
+        decision.intent_key, decision.similarity,
+    )  # fmt: skip

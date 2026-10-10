@@ -35,8 +35,11 @@ class ChatResponse(BaseModel):
     usage: ChatUsage
     estimated_cost_myr: float
     request_id: uuid.UUID
-    provider_mode: Literal["mock", "live", "none"]
+    provider_mode: Literal["mock", "live", "none"]  # "none": answered from approved FAQ, no provider call
     request_category: str
+    cache_decision: str | None = None
+    faq_intent_key: str | None = None
+    similarity: float | None = None
 
 
 class ChatSessionResponse(BaseModel):

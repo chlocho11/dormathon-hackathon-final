@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.config import get_settings
 from app.db import ping_database
+from app.services import embeddings
 
 router = APIRouter(tags=["health"])
 
@@ -17,6 +18,7 @@ def health() -> dict:
         "dependencies": {
             "database": db,
             "anthropic": {"mode": settings.provider_mode, "model": settings.anthropic_model},
+            "embeddings": embeddings.status(),
         },
         "demo_mode": settings.demo_mode,
         "pricing_catalog_version": settings.pricing_catalog_version,

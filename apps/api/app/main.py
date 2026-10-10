@@ -5,10 +5,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import anomalies, chat, demo, evaluation, forecasts, health, usage
+from app.api import anomalies, chat, decisions, demo, evaluation, forecasts, health, overview, usage
 from app.api import settings as settings_api
 from app.config import get_settings
 from app.errors import install_error_handlers
+from app.services import embeddings
 from app.services.anthropic_adapter import AnthropicProvider, get_provider
 
 API_PREFIX = "/api/v1"
@@ -24,6 +25,7 @@ async def lifespan(_: FastAPI):
         log.info("Anthropic live mode: model %s validated", provider.model)
     else:
         log.warning("Anthropic MOCK mode: no real provider calls will be made.")
+    embeddings.warm_in_background()
     yield
 
 
@@ -62,7 +64,7 @@ def create_app() -> FastAPI:
     install_error_handlers(app)
     for router in (
         health.router, chat.router, settings_api.router, demo.router, forecasts.router, anomalies.router,
-        usage.router, evaluation.router,
+        usage.router, evaluation.router, decisions.router, overview.router,
     ):  # fmt: skip
         app.include_router(router, prefix=API_PREFIX)
     return app

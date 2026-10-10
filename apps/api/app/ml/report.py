@@ -115,6 +115,51 @@ def render_report(r: dict) -> str:
             f"{', '.join(ev['reason_codes']) or '-'} |"
         )
     lines += ["", "Notes:"] + [f"- {n}" for n in an["notes"]]
+    c = r.get("cache")
+    if c:
+        lines += (
+            [
+                "",
+                "## Safe FAQ cache (labelled query set)",
+                "",
+                f"Model {c['model']}, threshold {c['threshold']}, margin {c['margin']}, plus the deterministic safety gate "
+                "and key-term guard.",
+                "",
+                f"- Accepted hits: {c['accepted_hits']} of {c['n']} queries; **hit precision {_f(c['hit_precision'])}**; "
+                f"false hits {c['false_hits']} (adversarial false hits {c['adversarial_false_hits']}).",
+                f"- Positive coverage {_f(c['positive_coverage'])} ("
+                + ", ".join(f"{g}: {v['correct_hits']}/{v['n']}" for g, v in c["by_group"].items())
+                + ").",
+                f"- Decision latency: median {c['latency_ms']['median']:.2f} ms, p95 {c['latency_ms']['p95']:.2f} ms.",
+                f"- Without the safety gate (embedding only): hit precision "
+                f"{_f(c['ablation_without_safety_gate']['hit_precision'])}, false hits "
+                f"{c['ablation_without_safety_gate']['false_hits']}.",
+                "",
+                "| Threshold | Hit precision | Positive coverage | False hits |",
+                "|---|---|---|---|",
+            ]
+            + [
+                f"| {s['threshold']} | {_f(s['hit_precision'])} | {_f(s['positive_coverage'])} | {s['false_hits']} |"
+                for s in c["threshold_sweep"]
+            ]
+            + ["", f"_{c['caveat']}_"]
+        )
+    sim = r.get("simulator")
+    if sim:
+        fb, orc = sim["forecast_based"], sim["oracle_actual_units"]
+        lines += [
+            "",
+            f"## What-if simulator vs counterfactual truth ({sim['window'][0]}..{sim['window'][1]})",
+            "",
+            f"True net savings from caching (synthetic potential outcomes): RM{sim['true_net_savings_myr']:.2f} "
+            f"(gross RM{sim['true_gross_avoided_myr']:.2f} - overhead RM{sim['true_overhead_myr']:.2f}).",
+            "",
+            f"- Simulator on the forecast (as in production): RM{fb['estimate_myr']:.2f}, error "
+            f"RM{fb['abs_error_myr']:.2f} ({_f(fb['pct_error'], True)}).",
+            f"- Simulator on actual units (isolates assumption error): RM{orc['estimate_myr']:.2f}, error "
+            f"RM{orc['abs_error_myr']:.2f} ({_f(orc['pct_error'], True)}).",
+            f"- {sim['note']}",
+        ]
     lines += [
         "",
         "## Limitations",

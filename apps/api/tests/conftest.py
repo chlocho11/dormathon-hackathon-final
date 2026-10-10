@@ -83,7 +83,14 @@ def migrated_db():
 def clean_state():
     with get_engine().begin() as conn:
         conn.execute(text(f"TRUNCATE {MUTABLE_TABLES}"))
-        conn.execute(text("UPDATE policies SET enabled = false, approved_by = NULL, approved_at = NULL"))
+        conn.execute(
+            text(
+                "UPDATE policies SET enabled = false, approved_by = NULL, approved_at = NULL, "
+                "holdout_enabled = false, similarity_threshold = 0.95, ttl_hours = 24"
+            )
+        )
+        conn.execute(text("UPDATE workspaces SET knowledge_version = 1"))
+        conn.execute(text("UPDATE faq_entries SET expires_at = NULL, cacheable = true"))
         conn.execute(text("UPDATE applications SET app_key_hash = NULL"))
         conn.execute(text("UPDATE workspaces SET monthly_budget_myr = 200"))
     limiter.reset()

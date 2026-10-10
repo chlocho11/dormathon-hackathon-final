@@ -309,15 +309,80 @@ def summarize(forecast: dict, anomaly: dict) -> dict:
     }
 
 
-def evaluate_all(daily: pd.DataFrame, truth: pd.DataFrame, manifest: dict) -> dict:
+def evaluate_simulator(daily: pd.DataFrame, scenario_truth: pd.DataFrame, manifest: dict, model: str) -> dict:
+    """What-if estimate vs the synthetic counterfactual truth over the test window.
+
+    'forecast' uses the simulator exactly as in production (forecast units from history before the
+    test window); 'oracle' feeds actual units to isolate assumption error from forecast error.
+    """
+    from app.ml.train_forecast import fit_predict
+    from app.services.simulator import Assumptions, simulate_frame
+
+    panel = segment_panel(daily)
+    start, end = (pd.Timestamp(x) for x in manifest["splits"]["test"])
+    days = pd.date_range(start, end, freq="D")
+    hist = panel[panel.day < start]
+    cost = fit_predict(model, hist, "cost_myr", days)
+    req = fit_predict(model, hist, "requests", days).rename(columns={"yhat": "requests"})
+    pts = cost.rename(columns={"yhat": "cost"}).merge(req, on=["day", "app_id", "request_category"])
+    pts = pts.rename(columns={"app_id": "app"})
+    actual = panel[panel.day.between(start, end)].rename(columns={"app_id": "app", "cost_myr": "cost"})
+    assume = manifest["assumptions"]
+    a = Assumptions(
+        eligible_share=assume["faq_eligible_share_of_static_faq"],
+        safe_hit_rate=sum(s * r for s, r in assume["paraphrase_mix_and_matcher_recall"].values()),
+        overhead_per_lookup_myr=assume["cache_overhead_per_lookup_myr"],
+        fixed_daily_myr=assume["cache_fixed_daily_myr"],
+        target_apps=list(manifest["applications"]), sources={}, samples={},
+    )  # fmt: skip
+    est, oracle = simulate_frame(pts, a), simulate_frame(actual, a)
+    st = scenario_truth.assign(day=pd.to_datetime(scenario_truth.day))
+    st = st[st.day.between(start, end)]
+    true_net = float(st.true_net_savings_myr.sum())
+
+    def err(x: float) -> dict:
+        return {"estimate_myr": round(x, 4), "abs_error_myr": round(abs(x - true_net), 4),
+                "pct_error": abs(x - true_net) / abs(true_net) if true_net else None}  # fmt: skip
+
+    return {
+        "window": [str(start.date()), str(end.date())],
+        "true_net_savings_myr": round(true_net, 4),
+        "true_gross_avoided_myr": round(float(st.avoided_cost_myr.sum()), 4),
+        "true_overhead_myr": round(float(st.overhead_myr.sum()), 4),
+        "forecast_based": err(est["net_savings_myr"]),
+        "oracle_actual_units": err(oracle["net_savings_myr"]),
+        "assumptions": {"eligible_share": a.eligible_share, "safe_hit_rate": round(a.safe_hit_rate, 4)},
+        "note": "Assumptions are the generator's true rates (synthetic); with real traffic they must be measured.",
+    }
+
+
+def evaluate_all(
+    daily: pd.DataFrame, truth: pd.DataFrame, manifest: dict, scenario_truth: pd.DataFrame | None = None
+) -> dict:
+    from app.ml.cache_eval import evaluate_cache
+
     fc = evaluate_forecast(daily, manifest, truth)
     an = evaluate_anomaly(daily, truth, manifest)
+    cache = evaluate_cache()
+    sim = (
+        evaluate_simulator(daily, scenario_truth, manifest, fc["selection"]["chosen"])
+        if scenario_truth is not None
+        else None
+    )
+    summary = summarize(fc, an)
+    summary.update({
+        "cache_hit_precision": cache["hit_precision"], "cache_false_hits": cache["false_hits"],
+        "cache_positive_coverage": cache["positive_coverage"],
+        "simulator_forecast_based_pct_error": sim["forecast_based"]["pct_error"] if sim else None,
+    })  # fmt: skip
     return {
         "dataset": {k: manifest[k] for k in ("generator_version", "seed", "days", "start_date", "end_date", "splits")},
         "data_origin": "synthetic",
         "forecast": fc,
         "anomaly": an,
-        "summary": summarize(fc, an),
+        "cache": cache,
+        "simulator": sim,
+        "summary": summary,
     }
 
 

@@ -7,9 +7,49 @@ _Last updated: 2026-10-10_
 | 0. Scaffold | Done |
 | 1. Database & Gateway | Done (mock provider; real Anthropic call not yet verified, no key supplied) |
 | 2. Data & ML | Done (all metrics on synthetic data) |
-| 3. Decision & Cache | Next |
-| 4. Dashboard | Route skeleton only |
+| 3. Decision & Cache | Done (mock provider) |
+| 4. Dashboard | Next (route skeleton only) |
 | 5. E2E, Deploy, Demo | Not started |
+
+## Phase 3: Decision & Cache (done)
+
+### Completed
+- **Safe FAQ cache** ([faq_eligibility.py](apps/api/app/services/faq_eligibility.py), [cache.py](apps/api/app/services/cache.py), [embeddings.py](apps/api/app/services/embeddings.py)), in this order:
+  1. A deterministic safety gate rejects PII, account- or order-specific requests, dynamic requests (today, stock, dates, times), discounts, any digits, negation, multiple questions, non-English text, unsupported locales and conflicting product names.
+  2. Exact matching against approved FAQ phrasings and aliases.
+  3. Local MiniLM semantic matching, only at cosine ≥ the policy threshold (default 0.95), with a margin ≥ 0.03 over the next intent and identical key terms (day and product names).
+
+  Matching is scoped to workspace + application + locale + knowledge version and only uses unexpired, cacheable entries. Hits return the **approved FAQ answer** and make no provider call. The decision is recorded for every request (`cache_decision`), in shadow mode before approval. Owners can opt in to a deterministic 10% holdout. A knowledge-version bump invalidates the cache, and TTL lives in `response_cache`. Embeddings run through fastembed (ONNX, no torch) and are baked into the Docker image. If the model is unavailable, the cache falls back to exact matching only and health reports it.
+- **Embeddings, measured:** true paraphrases score 0.80–0.90 cosine, and so do the spec's different-answer pairs (Sunday vs Saturday 0.864, Chocolate vs Vanilla 0.836, "deliver" vs "deliver to my address" 0.818). Embeddings alone cannot separate them, so the gate, exact aliases and the key-term guard are mandatory; the spec allows exactly this ("bypass and/or require deterministic intent matching").
+- **What-if simulator** ([simulator.py](apps/api/app/services/simulator.py)) transforms the **persisted forecast's** predicted requests and costs for `static_faq` in the target apps: hits = requests × eligible share × safe hit rate; gross = hits × predicted cost per request; net = gross − overhead (per-lookup + fixed daily, labelled assumptions). Defaults come from measured shadow decisions on real traffic (n ≥ 50, smoothed), otherwise the synthetic dataset's rates, otherwise assumed values, and every source is labelled. Client overrides are bounded; clients cannot submit costs. The output includes assumption sensitivity, a separate forecast-interval range, a quality gate (approved catalog, threshold range, adversarial cache tests, reversibility, approved answers only) and the evidence type.
+- **Recommender** ([recommender.py](apps/api/app/services/recommender.py)): deterministic. It proposes the gate-passing option with the highest positive net savings; otherwise it recommends "No safe intervention yet; collect more data". Rationales come from a template and say plainly when the budget is still exceeded.
+- **Approval workflow:** owner only, with an optimistic `expected_version`, rejection of stale proposals (newer forecast), idempotent repeat approvals, and a single transaction that enables policies, updates the recommendation and writes audit rows. Reject, emergency disable (resumes provider calls and marks the recommendation `disabled`), and policy PATCH (threshold 0.95–0.99, TTL 1–168 h, holdout; audited) are all included.
+- **Measurement** ([measurement.py](apps/api/app/services/measurement.py)): per app since approval it reports requests, provider calls, exact/semantic hits, bypasses, holdout, avoided cost, overhead and net. With ≥ 30 holdout requests it uses a holdout counterfactual; otherwise the estimate is labelled observational. Mock-mode accounting is flagged.
+- **API:** `POST /scenarios/compare`, `POST /recommendations/generate`, `GET /recommendations`, `POST /recommendations/{id}/approve|reject`, `GET /policies`, `PATCH /policies/{id}`, `POST /policies/{id}/disable`, `GET /audit`, `GET /measurement`, `POST /faq/invalidate`, `GET /overview`.
+- FAQ catalogs for all three demo apps; migration **0003** (`api_requests.cache_decision`); [scripts/demo_replay.py](scripts/demo_replay.py); the cache and simulator evaluations are part of `run_evaluation.py` and the generated report.
+
+### Verified (2026-10-10)
+| Check | Result |
+|---|---|
+| `ruff`, `pytest` | pass, **148 passed** (51 new: cache, simulator, approval) |
+| Migration 0003 up / down / up, `alembic check` | clean |
+| Cache, labelled set (51 queries) | hit precision **1.00**, **0 false hits** (0/26 adversarial), coverage 0.80 (13/13 exact, 7/12 paraphrase), median decision 0.06 ms |
+| Threshold sweep | false hits at 0.85–0.90; 0 from 0.92; coverage drops to 0.56 at 0.97, so **0.95 is supported empirically** |
+| Ablation without the safety gate | precision 0.952, 1 false hit, so the gate is necessary |
+| Simulator vs synthetic counterfactual (test window) | on actual units: RM40.67 vs truth RM40.69 (0.1% error, formula correct); on the forecast: RM26.66 (34.5% error, all from test-period under-forecasting) |
+| Live replay (`demo_replay.py --approve --disable-after`, mock) | identical 10 prompts: **10 → 3 provider calls** after approval; order-status, personal-address and numeric prompts still bypass; disable resumes provider calls |
+| Live recommendation | "Projected RM269.46 vs RM200 budget … static FAQ RM63.02 … synthetic-data 64% safe hit share, RM13.49 overhead … approximately RM242.64 (net RM26.82; RM15.22–RM40.30) … does not fully eliminate the budget overrun" |
+
+### Bugs found by the live run and fixed (with regression tests)
+- The in-memory match index held ORM objects across DB sessions, so the second request raised `DetachedInstanceError`. It now caches plain snapshots.
+- Mock provider request IDs used a per-process counter and collided with stored rows after a restart. They now use UUIDs.
+- The savings sensitivity mixed forecast-interval and assumption uncertainty (−RM13 to RM157). They are now reported separately.
+
+### Known limitations
+- At a 0.95 threshold, semantic matching adds only a little coverage beyond aliases (7/12 paraphrases). This is a deliberate safety trade-off.
+- The labelled cache set covers the bakery app; the tuition and retail catalogs are covered by the "every approved phrase passes the gate" test only.
+- Simulator defaults come from the synthetic generator's true rates until ≥ 50 real FAQ requests exist. These are labelled `synthetic` and are not measured evidence.
+- Measured savings in the replay are mock-mode accounting. At demo volumes the fixed daily overhead assumption makes observed net savings negative, and it is reported as such.
 
 ## Phase 2: Data & ML (done)
 
@@ -95,5 +135,5 @@ Monorepo per §4; FastAPI app factory with error envelope, request IDs, security
 
 Environment notes: this machine has no Docker or `make`; `uv` was installed via pip (`python3 -m uv`). The API is pinned to Python 3.12 (uv-managed).
 
-## Next: Phase 3 (Decision & Cache)
-Safe FAQ cache (normalization, PII/dynamic-query denylist, exact + alias + MiniLM embedding match with a 0.95 threshold and 0.03 margin, tenant/version/locale/TTL gates, adversarial test set), a what-if simulator on the persisted forecast (evaluated against `scenario_truth.csv`), recommendations, the owner approval workflow with audit, policy enable/disable, and savings measurement.
+## Next: Phase 4 (Dashboard)
+All P0 screens wired to the API (Overview, Predictions, Anomalies, Decision Lab with sliders and approval modal, Usage Explorer, Evaluation, Demo Chatbot, Settings), shadcn/ui components, Recharts, provenance badges, and loading/empty/error states.

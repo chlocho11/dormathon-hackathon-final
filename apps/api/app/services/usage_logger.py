@@ -54,6 +54,7 @@ class LedgerEntry:
     faq_intent_key: str | None = None
     similarity_score: float | None = None
     client_fingerprint: str | None = None
+    cache_decision: str | None = None
 
 
 def record(session: Session, entry: LedgerEntry, request_id: uuid.UUID | None = None) -> ApiRequest:
@@ -76,6 +77,7 @@ def record(session: Session, entry: LedgerEntry, request_id: uuid.UUID | None = 
         data_origin="real",  # gateway traffic is never synthetic; mock calls are flagged via provider
         request_fingerprint=entry.request_fingerprint,
         client_fingerprint=entry.client_fingerprint,
+        cache_decision=entry.cache_decision,
         pricing_version=entry.pricing_version,
         error_code=entry.error_code,
         faq_intent_key=entry.faq_intent_key,

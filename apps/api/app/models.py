@@ -111,7 +111,9 @@ class ApiRequest(Base):
     client_fingerprint: Mapped[str | None] = mapped_column(Text)
     pricing_version: Mapped[str] = mapped_column(Text, nullable=False)
     error_code: Mapped[str | None] = mapped_column(Text)
-    # Safe-cache diagnostics (no raw text): matched FAQ intent and similarity score.
+    # Safe-cache diagnostics (no raw text): gate decision, matched FAQ intent and similarity score.
+    # cache_decision is recorded even while the cache policy is disabled ("shadow" evaluation).
+    cache_decision: Mapped[str | None] = mapped_column(Text)
     faq_intent_key: Mapped[str | None] = mapped_column(Text)
     similarity_score: Mapped[Decimal | None] = mapped_column(Numeric(6, 5))
     __table_args__ = (

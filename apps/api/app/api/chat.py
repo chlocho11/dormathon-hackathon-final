@@ -89,7 +89,10 @@ def chat(
     app, client_key = _authorize_app(session, body.application_id, creds, x_app_key)
     check_chat_limits(_client_ip(request), str(app.id), str(app.workspace_id))
     result = handle_chat(session, provider, app, body.message, body.locale, client_key)
-    mode = "mock" if result.provider.endswith("-mock") else "live"
+    if result.cache_status in ("exact_hit", "semantic_hit"):
+        mode = "none"
+    else:
+        mode = "mock" if result.provider.endswith("-mock") else "live"
     return ChatResponse(
         reply=result.reply,
         cache_status=result.cache_status,
@@ -98,4 +101,7 @@ def chat(
         request_id=result.request_id,
         provider_mode=mode,
         request_category=result.request_category,
+        cache_decision=result.cache_decision,
+        faq_intent_key=result.faq_intent_key,
+        similarity=result.similarity,
     )

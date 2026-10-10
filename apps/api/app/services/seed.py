@@ -23,6 +23,7 @@ DEMO_OWNER_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
 DEMO_VIEWER_ID = uuid.UUID("00000000-0000-4000-8000-000000000002")
 DEMO_APPS = ("bakery_demo", "tuition_demo", "retail_demo")
 CHAT_APP = "bakery_demo"
+FAQ_FIXTURES = {"bakery_demo": "bakery_faq.json", "tuition_demo": "tuition_faq.json", "retail_demo": "retail_faq.json"}
 
 
 def load_json(name: str) -> dict:
@@ -57,15 +58,15 @@ def ensure_pricing(session: Session) -> None:
         )
 
 
-def ensure_faq(session: Session, ws: Workspace, app: Application) -> None:
-    data = load_json("bakery_faq.json")
+def ensure_faq(session: Session, ws: Workspace, app: Application, fixture: str = "bakery_faq.json") -> None:
+    data = load_json(fixture)
     for e in data["entries"]:
         exists = session.scalar(
             select(FaqEntry.id).where(
                 FaqEntry.application_id == app.id,
                 FaqEntry.intent_key == e["intent_key"],
                 FaqEntry.locale == data["locale"],
-                FaqEntry.knowledge_version == data["knowledge_version"],
+                FaqEntry.knowledge_version == ws.knowledge_version,
             )
         )
         if exists:
@@ -79,7 +80,7 @@ def ensure_faq(session: Session, ws: Workspace, app: Application) -> None:
                 approved_answer=e["answer"],
                 aliases=e["aliases"],
                 locale=data["locale"],
-                knowledge_version=data["knowledge_version"],
+                knowledge_version=ws.knowledge_version,  # (re)publish approved FAQ at the current version
                 cacheable=True,
             )
         )
@@ -112,8 +113,8 @@ def ensure_workspace(
             app = Application(workspace_id=ws.id, name=app_name, is_active=True)
             session.add(app)
             session.flush()
-        if app_name == CHAT_APP:
-            ensure_faq(session, ws, app)
+        if app_name in FAQ_FIXTURES:
+            ensure_faq(session, ws, app, FAQ_FIXTURES[app_name])
             if not session.scalar(
                 select(Policy.id).where(Policy.application_id == app.id, Policy.policy_type == "semantic_cache")
             ):

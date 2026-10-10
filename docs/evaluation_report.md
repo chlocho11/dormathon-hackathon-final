@@ -63,6 +63,35 @@ Notes:
 - Benign promotion days (A7) count as negatives (hard negatives).
 - Injected labels are used only for scoring, never as features.
 
+## Safe FAQ cache (labelled query set)
+
+Model sentence-transformers/all-MiniLM-L6-v2 (local ONNX), threshold 0.95, margin 0.03, plus the deterministic safety gate and key-term guard.
+
+- Accepted hits: 20 of 51 queries; **hit precision 1.000**; false hits 0 (adversarial false hits 0).
+- Positive coverage 0.800 (adversarial: 0/26, positive_exact: 13/13, positive_paraphrase: 7/12).
+- Decision latency: median 0.06 ms, p95 3.19 ms.
+- Without the safety gate (embedding only): hit precision 0.952, false hits 1.
+
+| Threshold | Hit precision | Positive coverage | False hits |
+|---|---|---|---|
+| 0.85 | 0.955 | 0.840 | 1 |
+| 0.88 | 0.952 | 0.800 | 1 |
+| 0.9 | 0.952 | 0.800 | 1 |
+| 0.92 | 1.000 | 0.800 | 0 |
+| 0.95 | 1.000 | 0.800 | 0 |
+| 0.97 | 1.000 | 0.560 | 0 |
+| 0.99 | 1.000 | 0.560 | 0 |
+
+_Zero false hits on this provided set does not imply zero errors in general._
+
+## What-if simulator vs counterfactual truth (2026-09-13..2026-10-09)
+
+True net savings from caching (synthetic potential outcomes): RM40.69 (gross RM57.34 - overhead RM16.65).
+
+- Simulator on the forecast (as in production): RM26.66, error RM14.03 (34.5%).
+- Simulator on actual units (isolates assumption error): RM40.67, error RM0.03 (0.1%).
+- Assumptions are the generator's true rates (synthetic); with real traffic they must be measured.
+
 ## Limitations
 
 - Synthetic data follows the generator's assumptions (see `dataset_manifest.json`); real traffic will differ.

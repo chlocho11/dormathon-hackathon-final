@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     rate_limit_app_per_min: int = 120
     rate_limit_workspace_per_min: int = 300
 
+    # Safe FAQ cache. Embeddings are local (no LLM, no external API); "disabled" => exact matching only.
+    embedding_mode: Literal["local", "disabled"] = "local"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_cache_dir: str | None = None
+    semantic_margin: float = 0.03
+    cache_overhead_per_lookup_myr: float = 0.00005  # assumption: local embedding + DB lookup
+    cache_fixed_daily_myr: float = 0.20  # assumption: share of hosting/DB attributable to the cache
+
     chat_max_chars: int = 1000
     chat_max_output_tokens: int = 250
     provider_timeout_s: float = 25.0

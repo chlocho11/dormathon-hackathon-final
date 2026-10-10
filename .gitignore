@@ -28,6 +28,8 @@ data/generated/*
 artifacts/*
 !artifacts/.gitkeep
 
+.models/
+
 # OS / editor
 .DS_Store
 Thumbs.db
