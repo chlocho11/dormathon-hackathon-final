@@ -34,11 +34,14 @@ web:
 dev: install migrate bootstrap
 	$(MAKE) -j2 api web
 
+# Deterministic synthetic history (seed 42, 180 days ending yesterday) loaded into the demo workspace.
 seed:
-	@echo "Implemented in Phase 2 (scripts/generate_synthetic.py)" && exit 1
+	cd $(API) && $(UV) run python ../../scripts/seed_demo.py
 
+# Offline evaluation (stores thresholds), then aggregate real traffic, forecast and anomaly detection.
 train:
-	@echo "Implemented in Phase 2" && exit 1
+	cd $(API) && $(UV) run python ../../scripts/run_evaluation.py --db
+	cd $(API) && $(UV) run python -m app.jobs.predict
 
 lint:
 	cd $(API) && $(UV) run ruff check . && $(UV) run ruff format --check .

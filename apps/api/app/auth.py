@@ -47,6 +47,7 @@ class Membership:
 class ChatScope:
     workspace_id: uuid.UUID
     application_id: uuid.UUID
+    session_id: str | None = None  # token jti; identifies one chat session for retry detection
 
 
 def _unauthorized(message: str = "Missing or invalid credentials.") -> ApiError:
@@ -135,7 +136,11 @@ def decode_chat_token(token: str) -> ChatScope | None:
         return None
     if claims.get("scope") != "chat":
         return None
-    return ChatScope(workspace_id=uuid.UUID(claims["ws"]), application_id=uuid.UUID(claims["app"]))
+    return ChatScope(
+        workspace_id=uuid.UUID(claims["ws"]),
+        application_id=uuid.UUID(claims["app"]),
+        session_id=claims.get("jti"),
+    )
 
 
 def bearer_token(creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]) -> str:

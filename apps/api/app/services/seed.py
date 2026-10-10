@@ -95,9 +95,7 @@ def ensure_workspace(
     """Create (or fetch) a workspace with members, demo apps, FAQ and a disabled cache policy."""
     ws = session.scalar(select(Workspace).where(Workspace.slug == slug))
     if ws is None:
-        ws = Workspace(
-            name=name, slug=slug, monthly_budget_myr=Decimal(str(get_settings().monthly_budget_myr_default))
-        )
+        ws = Workspace(name=name, slug=slug, monthly_budget_myr=Decimal(str(get_settings().monthly_budget_myr_default)))
         session.add(ws)
         session.flush()
     members = [(owner_id, "owner")] + ([(viewer_id, "viewer")] if viewer_id else [])
@@ -109,9 +107,7 @@ def ensure_workspace(
         ):
             session.add(WorkspaceMember(workspace_id=ws.id, auth_user_id=user_id, role=role))
     for app_name in DEMO_APPS:
-        app = session.scalar(
-            select(Application).where(Application.workspace_id == ws.id, Application.name == app_name)
-        )
+        app = session.scalar(select(Application).where(Application.workspace_id == ws.id, Application.name == app_name))
         if app is None:
             app = Application(workspace_id=ws.id, name=app_name, is_active=True)
             session.add(app)
@@ -119,9 +115,7 @@ def ensure_workspace(
         if app_name == CHAT_APP:
             ensure_faq(session, ws, app)
             if not session.scalar(
-                select(Policy.id).where(
-                    Policy.application_id == app.id, Policy.policy_type == "semantic_cache"
-                )
+                select(Policy.id).where(Policy.application_id == app.id, Policy.policy_type == "semantic_cache")
             ):
                 # Off by default: caching is only enabled through explicit owner approval.
                 session.add(Policy(workspace_id=ws.id, application_id=app.id, policy_type="semantic_cache"))

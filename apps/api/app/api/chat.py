@@ -38,15 +38,19 @@ def _authorize_app(
     application_id,
     creds: HTTPAuthorizationCredentials | None,
     app_key: str | None,
-) -> Application:
-    """Accept a scoped chat token, a hashed application key, or a member's user JWT."""
+) -> tuple[Application, str]:
+    """Accept a scoped chat token, a hashed application key, or a member's user JWT.
+
+    Returns the application and a client key (session / user / key holder) used only as an HMAC
+    input so retries can be told apart from different customers asking the same question.
+    """
     not_found = ApiError(404, "not_found", "Application not found.")
     app = session.get(Application, application_id)
     if app is None or not app.is_active:
         raise not_found
     if app_key:
         if app.app_key_hash and app.app_key_hash == hash_app_key(app_key):
-            return app
+            return app, f"key:{app.id}"
         raise ApiError(401, "unauthorized", "Invalid application key.")
     if creds is None:
         raise ApiError(401, "unauthorized", "Missing or invalid credentials.")
@@ -54,11 +58,11 @@ def _authorize_app(
     if scope is not None:
         if scope.application_id != app.id or scope.workspace_id != app.workspace_id:
             raise not_found
-        return app
+        return app, f"chat:{scope.session_id}"
     principal = decode_user_token(creds.credentials)
     if get_membership(session, app.workspace_id, principal.user_id) is None:
         raise not_found
-    return app
+    return app, f"user:{principal.user_id}"
 
 
 @router.post("/chat/session", response_model=ChatSessionResponse)
@@ -82,9 +86,9 @@ def chat(
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
     x_app_key: Annotated[str | None, Header()] = None,
 ) -> ChatResponse:
-    app = _authorize_app(session, body.application_id, creds, x_app_key)
+    app, client_key = _authorize_app(session, body.application_id, creds, x_app_key)
     check_chat_limits(_client_ip(request), str(app.id), str(app.workspace_id))
-    result = handle_chat(session, provider, app, body.message, body.locale)
+    result = handle_chat(session, provider, app, body.message, body.locale, client_key)
     mode = "mock" if result.provider.endswith("-mock") else "live"
     return ChatResponse(
         reply=result.reply,

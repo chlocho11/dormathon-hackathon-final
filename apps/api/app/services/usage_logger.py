@@ -29,6 +29,13 @@ def fingerprint(workspace_id: uuid.UUID, message: str) -> str:
     return hmac.new(key, payload, hashlib.sha256).hexdigest()
 
 
+def client_fingerprint(workspace_id: uuid.UUID, client_key: str | None) -> str | None:
+    if not client_key:
+        return None
+    key = get_settings().effective_fingerprint_secret.encode()
+    return hmac.new(key, f"client:{workspace_id}:{client_key}".encode(), hashlib.sha256).hexdigest()
+
+
 @dataclass
 class LedgerEntry:
     workspace_id: uuid.UUID
@@ -46,6 +53,7 @@ class LedgerEntry:
     error_code: str | None = None
     faq_intent_key: str | None = None
     similarity_score: float | None = None
+    client_fingerprint: str | None = None
 
 
 def record(session: Session, entry: LedgerEntry, request_id: uuid.UUID | None = None) -> ApiRequest:
@@ -67,12 +75,11 @@ def record(session: Session, entry: LedgerEntry, request_id: uuid.UUID | None = 
         provider_request_id=entry.provider_request_id,
         data_origin="real",  # gateway traffic is never synthetic; mock calls are flagged via provider
         request_fingerprint=entry.request_fingerprint,
+        client_fingerprint=entry.client_fingerprint,
         pricing_version=entry.pricing_version,
         error_code=entry.error_code,
         faq_intent_key=entry.faq_intent_key,
-        similarity_score=None
-        if entry.similarity_score is None
-        else Decimal(str(round(entry.similarity_score, 5))),
+        similarity_score=None if entry.similarity_score is None else Decimal(str(round(entry.similarity_score, 5))),
     )
     session.add(row)
     session.flush()

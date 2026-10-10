@@ -6,9 +6,7 @@ from app.models import ApiRequest
 
 
 def test_settings_of_other_workspace_not_visible(client, owner_headers, other_app):
-    res = client.get(
-        f"/api/v1/settings/workspace?workspace_id={other_app.workspace_id}", headers=owner_headers
-    )
+    res = client.get(f"/api/v1/settings/workspace?workspace_id={other_app.workspace_id}", headers=owner_headers)
     assert res.status_code == 404
 
 
@@ -22,10 +20,7 @@ def test_cannot_patch_other_workspace(client, owner_headers, other_app):
 
 
 def test_cannot_rotate_other_workspace_key(client, owner_headers, other_app):
-    assert (
-        client.post(f"/api/v1/applications/{other_app.id}/rotate-key", headers=owner_headers).status_code
-        == 404
-    )
+    assert client.post(f"/api/v1/applications/{other_app.id}/rotate-key", headers=owner_headers).status_code == 404
 
 
 def test_user_cannot_chat_with_other_workspace_app(client, owner_headers, other_app, mock_provider, session):

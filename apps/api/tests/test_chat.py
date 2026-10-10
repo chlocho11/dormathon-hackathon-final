@@ -8,9 +8,7 @@ from app.services.usage_logger import fingerprint
 
 
 def _chat(client, headers, app_id, message="Can you recommend a cake for a birthday party?"):
-    return client.post(
-        "/api/v1/chat", json={"application_id": str(app_id), "message": message}, headers=headers
-    )
+    return client.post("/api/v1/chat", json={"application_id": str(app_id), "message": message}, headers=headers)
 
 
 def test_miss_calls_provider_once_and_records_usage(client, chat_headers, bakery_app, mock_provider, session):

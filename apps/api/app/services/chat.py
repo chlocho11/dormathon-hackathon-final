@@ -66,8 +66,9 @@ def build_system_prompt(faqs: list[FaqEntry], version: int) -> str:
 
 
 def handle_chat(
-    session: Session, provider: ChatProvider, app: Application, message: str, locale: str
-) -> ChatResult:
+    session: Session, provider: ChatProvider, app: Application, message: str, locale: str,
+    client_key: str | None = None,
+) -> ChatResult:  # fmt: skip
     settings = get_settings()
     ws = session.get(Workspace, app.workspace_id)
     assert ws is not None
@@ -92,6 +93,7 @@ def handle_chat(
         model=provider.model,
         request_category=category,
         request_fingerprint=fp,
+        client_fingerprint=usage_logger.client_fingerprint(ws.id, client_key),
         pricing_version=rates.version,
     )
     try:

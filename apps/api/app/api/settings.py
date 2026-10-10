@@ -39,12 +39,8 @@ def me(principal: CurrentUser, session: DbSession) -> MeResponse:
 
 def _settings_out(session: DbSession, ws: Workspace, role: str) -> WorkspaceSettings:
     s = get_settings()
-    apps = session.scalars(
-        select(Application).where(Application.workspace_id == ws.id).order_by(Application.name)
-    )
-    real = session.scalar(
-        select(func.count()).select_from(ApiRequest).where(ApiRequest.workspace_id == ws.id)
-    )
+    apps = session.scalars(select(Application).where(Application.workspace_id == ws.id).order_by(Application.name))
+    real = session.scalar(select(func.count()).select_from(ApiRequest).where(ApiRequest.workspace_id == ws.id))
     synthetic_days = session.scalar(
         select(func.count(func.distinct(DailyUsage.day))).where(
             DailyUsage.workspace_id == ws.id, DailyUsage.data_origin == "synthetic"
@@ -59,9 +55,7 @@ def _settings_out(session: DbSession, ws: Workspace, role: str) -> WorkspaceSett
         knowledge_version=ws.knowledge_version,
         role=role,
         applications=[
-            ApplicationOut(
-                id=a.id, name=a.name, is_active=a.is_active, has_api_key=a.app_key_hash is not None
-            )
+            ApplicationOut(id=a.id, name=a.name, is_active=a.is_active, has_api_key=a.app_key_hash is not None)
             for a in apps
         ],
         data_sources={"real_requests": real or 0, "synthetic_days": synthetic_days or 0},
@@ -113,9 +107,7 @@ def patch_workspace_settings(
 
 
 @router.post("/applications/{application_id}/rotate-key", response_model=RotatedKeyResponse)
-def rotate_app_key(
-    application_id: uuid.UUID, principal: CurrentUser, session: DbSession
-) -> RotatedKeyResponse:
+def rotate_app_key(application_id: uuid.UUID, principal: CurrentUser, session: DbSession) -> RotatedKeyResponse:
     app = session.get(Application, application_id)
     if app is None:
         raise ApiError(404, "not_found", "Application not found.")

@@ -38,6 +38,18 @@ npm run dev                           # http://localhost:3000
 python scripts/smoke_test.py          # end-to-end HTTP check of the running API
 ```
 
+### Synthetic history, evaluation and forecasts
+
+```bash
+cd apps/api
+uv run python ../../scripts/seed_demo.py --evaluate --predict
+#   = generate seed-42 synthetic data (180 days ending yesterday) -> load into the demo workspace
+#   -> offline evaluation (docs/evaluation_report.md, artifacts/evaluation/) -> forecast + anomaly detection
+uv run python -m app.jobs.predict     # daily job: aggregate real traffic, forecast, detect anomalies
+```
+
+`make seed` and `make train` wrap these. All synthetic rows are labelled `data_origin=synthetic`; see [docs/data_dictionary.md](docs/data_dictionary.md) and [docs/model_card.md](docs/model_card.md).
+
 With `make`: `make dev`, `make test`, `make lint`, `make smoke`. On Windows without `make`, run the commands above directly (if `uv` is not on PATH, use `python -m uv`).
 
 ### Local auth

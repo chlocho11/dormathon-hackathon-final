@@ -107,6 +107,8 @@ class ApiRequest(Base):
     provider_request_id: Mapped[str | None] = mapped_column(Text, unique=True)
     data_origin: Mapped[str] = mapped_column(Text, nullable=False)
     request_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    # HMAC of the chat session / user / app key: lets retries be told apart from popular repeats.
+    client_fingerprint: Mapped[str | None] = mapped_column(Text)
     pricing_version: Mapped[str] = mapped_column(Text, nullable=False)
     error_code: Mapped[str | None] = mapped_column(Text)
     # Safe-cache diagnostics (no raw text): matched FAQ intent and similarity score.
@@ -161,9 +163,7 @@ class ResponseCache(Base):
     created_at: Mapped[datetime] = _now()
     last_hit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     hit_count: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
-    __table_args__ = (
-        UniqueConstraint("application_id", "normalized_query_hash", "locale", "knowledge_version"),
-    )
+    __table_args__ = (UniqueConstraint("application_id", "normalized_query_hash", "locale", "knowledge_version"),)
 
 
 class DailyUsage(Base):
@@ -179,12 +179,13 @@ class DailyUsage(Base):
     output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
     cost_myr: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False)
     cache_hits: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    retry_requests: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
     data_origin: Mapped[str] = mapped_column(Text, nullable=False)
     __table_args__ = (
         UniqueConstraint("workspace_id", "application_id", "day", "request_category", "model", "data_origin"),
+        CheckConstraint("retry_requests >= 0", name="ck_daily_usage_retry_nonneg"),
         CheckConstraint(
-            "requests >= 0 AND input_tokens >= 0 AND output_tokens >= 0 "
-            "AND cost_myr >= 0 AND cache_hits >= 0",
+            "requests >= 0 AND input_tokens >= 0 AND output_tokens >= 0 AND cost_myr >= 0 AND cache_hits >= 0",
             name="ck_daily_usage_nonneg",
         ),
         CheckConstraint("data_origin IN ('real','synthetic')", name="ck_daily_usage_origin"),

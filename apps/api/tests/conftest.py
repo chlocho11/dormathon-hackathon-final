@@ -7,6 +7,7 @@ PostgreSQL via `pgserver` in a temp directory.
 import os
 import tempfile
 import uuid
+from datetime import date
 
 import pytest
 
@@ -27,9 +28,7 @@ def _database_url() -> str:
         return url
     import pgserver
 
-    _server = pgserver.get_server(
-        os.path.join(tempfile.gettempdir(), "tokenguard_pgtest"), cleanup_mode="stop"
-    )
+    _server = pgserver.get_server(os.path.join(tempfile.gettempdir(), "tokenguard_pgtest"), cleanup_mode="stop")
     _server.psql(f"DROP DATABASE IF EXISTS {TEST_DB} WITH (FORCE);")
     _server.psql(f"CREATE DATABASE {TEST_DB};")
     base = _server.get_uri().rsplit("/", 1)[0].replace("postgresql://", "postgresql+psycopg://", 1)
@@ -58,10 +57,14 @@ from app.services.seed import (  # noqa: E402
 )
 
 OTHER_OWNER_ID = uuid.UUID("00000000-0000-4000-8000-0000000000b1")
-MUTABLE_TABLES = (
-    "recommendations, scenario_runs, forecast_points, forecast_runs, anomaly_events, response_cache, "
-    "daily_usage, api_requests, evaluation_runs"
+# Reset before every test. Analytical tables (daily_usage, forecasts, anomalies, evaluation_runs)
+# are reset by the module-scoped `seeded` fixture so the expensive seed + forecast runs once.
+MUTABLE_TABLES = "api_requests, response_cache"
+ANALYTICAL_TABLES = (
+    "recommendations, scenario_runs, forecast_points, forecast_runs, anomaly_events, daily_usage, evaluation_runs"
 )
+SYNTHETIC_END = date(2026, 10, 9)
+TODAY = date(2026, 10, 10)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -137,6 +140,32 @@ def other_app(session):
 
     ws = session.query(Workspace).filter_by(slug="other-ws").one()
     return chat_application(session, ws.id)
+
+
+@pytest.fixture(scope="session")
+def synthetic():
+    """The deterministic seed-42 dataset with a fixed end date (generated once per test session)."""
+    from app.ml.synthetic import generate
+
+    return generate(42, 180, SYNTHETIC_END)
+
+
+@pytest.fixture(scope="module")
+def seeded(synthetic):
+    """Demo workspace with synthetic history loaded, one forecast run and anomaly detection."""
+    from app.models import Workspace
+    from app.services.anomaly import detect_and_store
+    from app.services.forecast import run_forecast
+    from app.services.synthetic_loader import load_synthetic
+
+    with get_engine().begin() as conn:
+        conn.execute(text(f"TRUNCATE {ANALYTICAL_TABLES}"))
+    with Session(get_engine()) as s:
+        ws = s.query(Workspace).filter_by(slug="sweet-crumbs").one()
+        load_synthetic(s, ws, data_dir=None, generated=synthetic)
+        run = run_forecast(s, ws, today=TODAY)
+        anomalies = detect_and_store(s, ws, today=TODAY)
+        yield {"workspace_id": ws.id, "run_id": run.id, "anomalies": anomalies}
 
 
 @pytest.fixture

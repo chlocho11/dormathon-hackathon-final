@@ -85,9 +85,7 @@ def test_settings_read_by_viewer_but_only_owner_can_patch(client, owner_headers,
     assert res.json()["monthly_budget_myr"] == 200.0
     assert res.json()["role"] == "viewer"
 
-    denied = client.patch(
-        "/api/v1/settings/workspace", json={"monthly_budget_myr": 300}, headers=viewer_headers
-    )
+    denied = client.patch("/api/v1/settings/workspace", json={"monthly_budget_myr": 300}, headers=viewer_headers)
     assert denied.status_code == 403
 
     ok = client.patch("/api/v1/settings/workspace", json={"monthly_budget_myr": 300}, headers=owner_headers)
@@ -99,15 +97,11 @@ def test_settings_read_by_viewer_but_only_owner_can_patch(client, owner_headers,
 
 def test_settings_patch_validation(client, owner_headers):
     assert (
-        client.patch(
-            "/api/v1/settings/workspace", json={"monthly_budget_myr": -1}, headers=owner_headers
-        ).status_code
+        client.patch("/api/v1/settings/workspace", json={"monthly_budget_myr": -1}, headers=owner_headers).status_code
         == 422
     )
     assert (
-        client.patch(
-            "/api/v1/settings/workspace", json={"timezone": "Mars/Base"}, headers=owner_headers
-        ).status_code
+        client.patch("/api/v1/settings/workspace", json={"timezone": "Mars/Base"}, headers=owner_headers).status_code
         == 422
     )
 
