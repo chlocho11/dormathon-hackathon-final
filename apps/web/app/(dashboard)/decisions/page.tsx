@@ -67,7 +67,10 @@ export default function DecisionLabPage() {
 
   const compare = useQuery({
     queryKey: ["compare", forecast?.id, debounced],
-    queryFn: () => api.compare(debounced),
+    queryFn: () => {
+      if (!forecast) throw new Error("A forecast is needed before comparing scenarios.");
+      return api.compare(debounced, forecast.id);
+    },
     enabled: Boolean(forecast),
     placeholderData: keepPreviousData,
   });
