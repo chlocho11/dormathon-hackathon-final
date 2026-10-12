@@ -1,17 +1,19 @@
 # TokenGuard AI
 
+Deployed working app demo: https://dormathon-hackathon-final-wa5l.vercel.app/
+
 Predictive AI cost intelligence for small businesses: forecast Anthropic API spend, flag budget risk and abnormal usage, simulate safe interventions (FAQ semantic caching) against the same forecast, and activate them only with owner approval.
 
 Full specification: [MASTER_BUILD_PACK.md](MASTER_BUILD_PACK.md). Progress and verified evidence: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
 
 ## Layout
 
-| Path | What |
-|---|---|
-| `apps/api` | FastAPI backend (Python 3.12, SQLAlchemy 2, Alembic, uv) |
-| `apps/web` | Next.js 15 dashboard + BakeryBot demo (Tailwind v4, Lucide) |
-| `scripts/` | Synthetic data generation, seeding, evaluation, smoke tests |
-| `data/generated/`, `artifacts/` | Generated, git-ignored outputs |
+| Path                            | What                                                        |
+| ------------------------------- | ----------------------------------------------------------- |
+| `apps/api`                      | FastAPI backend (Python 3.12, SQLAlchemy 2, Alembic, uv)    |
+| `apps/web`                      | Next.js 15 dashboard + BakeryBot demo (Tailwind v4, Lucide) |
+| `scripts/`                      | Synthetic data generation, seeding, evaluation, smoke tests |
+| `data/generated/`, `artifacts/` | Generated, git-ignored outputs                              |
 
 ## Local setup
 
